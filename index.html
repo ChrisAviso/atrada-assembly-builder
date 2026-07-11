@@ -6,6 +6,1108 @@
 <title>Atrada Assembly Builder</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Ink / structure */
+  --navy:#16233c; --grey-text:#5b6572; --grey-border:#dde1e6; --grey-bg:#f2f3f5; --white:#fff;
+  /* Blueprint accent */
+  --blue:#1f5fa8; --blue-light:#e9f0f9;
+  /* Status / category accents (muted, technical-legend palette) */
+  --green:#1f9d63; --orange:#c17817; --red:#c62f45; --purple:#6d4e9c; --teal:#0f8a83;
+  --sheetmetal:#3f7cb0; --weldment:#c17817; --fastener:#6d4e9c; --label:#1f9d63; --other:#6b7280;
+  --radius:10px;
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--font-sans);background:var(--grey-bg);color:var(--navy);}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+a{color:var(--blue);}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+
+/* ---------- Login ---------- */
+#loginScreen{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--grey-bg);}
+.login-box{background:#fff;padding:36px 34px;border-radius:14px;box-shadow:0 24px 60px -18px rgba(15,22,36,.25),0 0 0 1px rgba(15,22,36,.04);width:340px;}
+.login-box h1{font-size:19px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em;}
+.login-box p{color:var(--grey-text);font-size:13px;margin:0 0 22px;}
+.login-box input{width:100%;padding:10px 0;margin-bottom:14px;border:none;border-bottom:1.5px solid var(--grey-border);border-radius:0;font-size:14px;font-family:var(--font-mono);}
+.login-box input:focus{outline:none;border-bottom-color:var(--blue);}
+.login-box button{width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;margin-top:4px;}
+.login-box button:hover{background:#194b87;}
+.login-error{color:var(--red);font-size:13px;margin-bottom:10px;}
+
+/* ---------- Top bar ---------- */
+#topbar{display:flex;align-items:center;justify-content:space-between;background:var(--navy);border-bottom:1px solid var(--navy);padding:12px 22px;position:sticky;top:0;z-index:50;}
+#topbar .brand{font-weight:600;font-size:15.5px;display:flex;align-items:center;gap:9px;color:#fff;letter-spacing:-.01em;}
+#topbar .brand .dot{width:9px;height:9px;border-radius:50%;background:#5b9bd9;}
+#topbar .right{display:flex;align-items:center;gap:14px;font-size:12.5px;color:#aeb8c9;font-family:var(--font-mono);}
+#topbar button.iconbtn{background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:7px 12px;font-size:12.5px;color:#fff;}
+#topbar button.iconbtn:hover{background:rgba(255,255,255,.08);}
+
+/* ---------- Board ---------- */
+#board{padding:24px;max-width:1500px;margin:0 auto;}
+.board-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.board-header h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;}
+.btn-primary{background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:600;}
+.btn-primary:hover{background:#194b87;}
+.btn-secondary{background:#fff;color:var(--navy);border:1px solid var(--grey-border);padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:600;}
+.btn-secondary:hover{background:var(--grey-bg);}
+
+table.board-table{width:100%;border-collapse:collapse;background:#fff;border-radius:var(--radius);overflow:hidden;border:1px solid var(--grey-border);box-shadow:0 1px 3px rgba(15,22,36,.04);}
+table.board-table thead th{text-align:left;font-size:10.5px;color:var(--grey-text);font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:11px 14px;border-bottom:1px solid var(--grey-border);background:var(--grey-bg);}
+table.board-table tbody tr{border-bottom:1px solid #eef0f2;cursor:pointer;transition:background .1s;}
+table.board-table tbody tr:last-child{border-bottom:none;}
+table.board-table tbody tr:hover{background:var(--blue-light);}
+table.board-table td{padding:12px 14px;font-size:13.5px;vertical-align:middle;}
+td.assembly-num{font-weight:600;color:var(--blue);font-family:var(--font-mono);}
+td.assembly-name{color:var(--navy);}
+.status-pill{display:inline-block;padding:3px 9px;border-radius:5px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;}
+.status-draft{background:#8a92a0;}
+.status-in_progress{background:var(--orange);}
+.status-ifc{background:var(--green);}
+.status-on_hold{background:var(--red);}
+.status-superseded{background:#6b7280;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--grey-text);}
+.empty-state h3{color:var(--navy);}
+
+/* ---------- Drawer (centered document card, title-block header) ---------- */
+#overlay{position:fixed;inset:0;background:rgba(15,22,36,.5);backdrop-filter:blur(2px);z-index:100;display:none;
+  opacity:0;transition:opacity .16s ease;}
+#overlay.open{display:block;opacity:1;}
+#drawer{position:fixed;top:50%;left:50%;transform:translate(-50%,-48%) scale(.98);height:88vh;width:min(1120px,94vw);
+  background:var(--white);z-index:101;border-radius:14px;
+  box-shadow:0 30px 70px -18px rgba(15,22,36,.4),0 0 0 1px rgba(15,22,36,.05);
+  display:none;flex-direction:column;overflow:hidden;opacity:0;
+  transition:opacity .16s ease,transform .16s ease;}
+#drawer.open{display:flex;opacity:1;transform:translate(-50%,-50%) scale(1);}
+
+.drawer-header{padding:22px 28px 0;border-bottom:1px solid var(--grey-border);background:var(--white);}
+.drawer-header .row1{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;}
+.drawer-eyebrow{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--blue);text-transform:uppercase;margin:0 0 4px;}
+.drawer-header h2{margin:0 0 3px;font-size:21px;font-weight:600;letter-spacing:-.01em;}
+.drawer-header .sub{color:var(--grey-text);font-size:13px;}
+.drawer-close{background:none;border:1px solid var(--grey-border);width:30px;height:30px;border-radius:8px;font-size:18px;color:var(--grey-text);line-height:1;flex-shrink:0;}
+.drawer-close:hover{background:var(--grey-bg);color:var(--navy);}
+
+/* Title-block meta strip: bordered cells, small-caps labels, mono values */
+.meta-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--grey-border);border-radius:8px;overflow:hidden;margin-bottom:18px;background:var(--grey-bg);}
+.meta-field{padding:9px 14px;border-left:1px solid var(--grey-border);background:var(--white);}
+.meta-field:first-child{border-left:none;}
+.meta-field label{display:block;font-size:10px;color:var(--grey-text);text-transform:uppercase;font-weight:600;letter-spacing:.06em;margin-bottom:4px;}
+.meta-field select, .meta-field input{width:100%;padding:2px 0;border:none;border-bottom:1px solid transparent;background:none;font-size:13.5px;font-family:var(--font-mono);color:var(--navy);border-radius:0;}
+.meta-field select:hover, .meta-field input:hover{border-bottom-color:var(--grey-border);}
+.meta-field select:focus, .meta-field input:focus{outline:none;border-bottom-color:var(--blue);}
+
+.tabs{display:flex;gap:22px;padding:0 28px;border-bottom:1px solid var(--grey-border);background:var(--white);}
+.tab{padding:11px 2px;font-size:12.5px;font-weight:600;color:var(--grey-text);text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;margin-bottom:-1px;}
+.tab:hover{color:var(--navy);}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+.drawer-body{flex:1;overflow-y:auto;padding:20px 28px 40px;background:var(--white);}
+
+/* ---------- BOM tree (technical legend strips + hairline data table) ---------- */
+.category-band{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:5px;color:#fff;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 0;
+  font-family:var(--font-mono);}
+.category-band:first-child{margin-top:0;}
+.cat-sheetmetal{background:var(--sheetmetal);}
+.cat-weldment{background:var(--weldment);}
+.cat-fastener{background:var(--fastener);}
+.cat-label{background:var(--label);}
+.cat-other{background:var(--other);}
+
+table.bom-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:4px;border:1px solid var(--grey-border);border-top:none;}
+table.bom-table th{text-align:left;background:var(--grey-bg);color:var(--grey-text);font-weight:600;padding:7px 10px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;border-bottom:1px solid var(--grey-border);}
+table.bom-table td{padding:7px 10px;border-bottom:1px solid #eef0f2;vertical-align:top;}
+table.bom-table td.mono{color:var(--grey-text);}
+tr.group-row td{background:#f7f9fb;font-weight:600;color:var(--navy);border-top:1px solid var(--grey-border);}
+tr.group-row .toggle{display:inline-block;width:14px;color:var(--grey-text);}
+tr.item-row:hover{background:var(--blue-light);}
+.indent{display:inline-block;}
+.empty-bom{color:var(--grey-text);padding:20px;text-align:center;font-size:13px;}
+
+/* ---------- Revisions / Attachments ---------- */
+table.rev-table, table.att-table{width:100%;border-collapse:collapse;font-size:13px;}
+table.rev-table th, table.att-table th{text-align:left;padding:8px;background:#fafbfc;color:var(--grey-text);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--grey-border);}
+table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1f4;vertical-align:top;}
+.rev-badge{display:inline-block;background:var(--blue-light);color:var(--blue);font-weight:600;padding:2px 8px;border-radius:5px;font-size:12px;font-family:var(--font-mono);}
+
+.upload-zone{border:1.5px dashed var(--grey-border);border-radius:8px;padding:26px;text-align:center;color:var(--grey-text);font-size:13px;margin-bottom:16px;background:var(--grey-bg);transition:border-color .12s,background .12s;}
+.upload-zone.dragover{border-color:var(--blue);background:var(--blue-light);}
+.upload-zone input{display:none;}
+.parse-badge{padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+.parse-pending{background:#f5e9c8;color:#8a6d00;}
+.parse-parsed{background:#dcf1e6;color:#0f7a45;}
+.parse-failed{background:#f7dde1;color:#a3283d;}
+.parse-manual{background:#e7e9ec;color:#5b6572;}
+
+.small-btn{background:none;border:1px solid var(--grey-border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--navy);font-weight:500;}
+.small-btn:hover{background:var(--grey-bg);}
+.linklike{background:none;border:none;color:var(--blue);font-size:13px;padding:0;}
+.section-title{font-size:13.5px;font-weight:600;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:.04em;color:var(--grey-text);}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 8px 24px rgba(15,22,36,.25);}
+
+/* New Assembly modal â matches the drawer's document-card language */
+#modalOverlay{position:fixed;inset:0;background:rgba(15,22,36,.5);backdrop-filter:blur(2px);z-index:150;display:none;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .15s ease;}
+#modalOverlay.open{display:flex;opacity:1;}
+.modal-box{background:#fff;border-radius:14px;padding:26px 28px;width:440px;max-width:92vw;
+  box-shadow:0 30px 70px -18px rgba(15,22,36,.4),0 0 0 1px rgba(15,22,36,.05);
+  transform:scale(.98);transition:transform .15s ease;}
+#modalOverlay.open .modal-box{transform:scale(1);}
+.modal-box h3{margin:0 0 4px;font-size:17px;font-weight:600;}
+.modal-box .modal-sub{color:var(--grey-text);font-size:12.5px;margin:0 0 6px;}
+.modal-box label{display:block;font-size:10.5px;color:var(--grey-text);margin:14px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+.modal-box input, .modal-box select{width:100%;padding:8px 0;border:none;border-bottom:1.5px solid var(--grey-border);border-radius:0;font-size:14px;font-family:var(--font-mono);background:none;color:var(--navy);}
+.modal-box input:focus, .modal-box select:focus{outline:none;border-bottom-color:var(--blue);}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>Atrada Assembly Builder</h1>
+    <p>Sign in to view the assembly board.</p>
+    <div id="loginError" class="login-error" style="display:none;"></div>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn">Sign in</button>
+  </div>
+</div>
+
+<div id="appShell" style="display:none;">
+  <div id="topbar">
+    <div class="brand"><span class="dot"></span> Atrada Assembly Builder</div>
+    <div class="right">
+      <span id="userEmail"></span>
+      <button class="iconbtn" id="signOutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div id="board">
+    <div class="board-header">
+      <h2>Assemblies</h2>
+      <button class="btn-primary" id="newAssemblyBtn">+ New Assembly</button>
+    </div>
+    <div id="boardTableWrap"></div>
+  </div>
+</div>
+
+<div id="overlay"></div>
+<div id="drawer">
+  <div class="drawer-header">
+    <div class="row1">
+      <div>
+        <div class="drawer-eyebrow">Assembly Record</div>
+        <h2 id="drawerTitle">-</h2>
+        <div class="sub" id="drawerSub">-</div>
+      </div>
+      <button class="drawer-close" id="drawerCloseBtn">&times;</button>
+    </div>
+    <div class="meta-grid">
+      <div class="meta-field"><label>Status</label><select id="metaStatus"></select></div>
+      <div class="meta-field"><label>Client</label><input id="metaClient"></div>
+      <div class="meta-field"><label>Current Rev</label><input id="metaRev"></div>
+      <div class="meta-field"><label>Tare Wt (kg)</label><input id="metaWeight"></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="bom">BOM Tree</button>
+    <button class="tab" data-tab="revisions">Revisions</button>
+    <button class="tab" data-tab="attachments">Attachments</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</div>
+
+<div id="modalOverlay">
+  <div class="modal-box">
+    <h3>New Assembly</h3>
+    <div class="modal-sub">Create a new assembly record on the board.</div>
+    <label>Assembly Number</label>
+    <input id="newAsmNumber" placeholder="e.g. TMSB201">
+    <label>Assembly Name</label>
+    <input id="newAsmName" placeholder="e.g. Maintenance Shutdown Box">
+    <label>Client</label>
+    <input id="newAsmClient" placeholder="optional">
+    <div class="modal-actions">
+      <button class="btn-secondary" id="modalCancelBtn">Cancel</button>
+      <button class="btn-primary" id="modalCreateBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// CONFIG
+// =====================================================================
+const SUPABASE_URL = "https://fiptponjqtoysddrphmo.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpcHRwb25qcXRveXNkZHJwaG1vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2OTQ3OTksImV4cCI6MjA5OTI3MDc5OX0.gZCyCX-NeVXMf8gqlve7NJ81QmtcspNYNTjjPfa01m4";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const CATEGORY_LABELS = {
+  sheetmetal: "Sheetmetal", weldment: "Weldments",
+  fastener: "Fasteners & Fittings", label: "Labels & Stickers", other: "Other"
+};
+const CATEGORY_ORDER = ["sheetmetal","weldment","fastener","label","other"];
+
+// =====================================================================
+// STATE
+// =====================================================================
+let currentUser = null;
+let assemblies = [];
+let selectedAssembly = null;
+let bomNodes = [];
+let revisions = [];
+let attachments = [];
+let activeTab = "bom";
+
+// =====================================================================
+// UTIL
+// =====================================================================
+function $(sel){ return document.querySelector(sel); }
+function $all(sel){ return document.querySelectorAll(sel); }
+function esc(s){
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function toast(msg, isError){
+  const t = document.createElement("div");
+  t.className = "toast";
+  if (isError) t.style.background = "#b3001f";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+function fmtNum(n){
+  if (n === null || n === undefined || n === "") return "";
+  const num = Number(n);
+  if (Number.isNaN(num)) return esc(n);
+  return num % 1 === 0 ? String(num) : String(num);
+}
+
+// =====================================================================
+// AUTH
+// =====================================================================
+async function initAuth(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && session.user){
+    currentUser = session.user;
+    showApp();
+  } else {
+    showLogin();
+  }
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_IN" && session && session.user){
+      currentUser = session.user;
+      showApp();
+    } else if (event === "SIGNED_OUT"){
+      currentUser = null;
+      showLogin();
+    }
+  });
+}
+
+function showLogin(){
+  $("#loginScreen").style.display = "flex";
+  $("#appShell").style.display = "none";
+}
+function showApp(){
+  $("#loginScreen").style.display = "none";
+  $("#appShell").style.display = "block";
+  $("#userEmail").textContent = currentUser.email || "";
+  loadAssemblies();
+}
+
+$("#loginBtn").addEventListener("click", async () => {
+  const email = $("#loginEmail").value.trim();
+  const password = $("#loginPassword").value;
+  $("#loginError").style.display = "none";
+  if (!email || !password){
+    $("#loginError").textContent = "Enter email and password.";
+    $("#loginError").style.display = "block";
+    return;
+  }
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){
+    $("#loginError").textContent = error.message;
+    $("#loginError").style.display = "block";
+  }
+});
+$("#loginPassword").addEventListener("keydown", e => { if (e.key === "Enter") $("#loginBtn").click(); });
+
+$("#signOutBtn").addEventListener("click", async () => {
+  await sb.auth.signOut();
+});
+
+// =====================================================================
+// BOARD
+// =====================================================================
+async function loadAssemblies(){
+  const { data, error } = await sb.from("assemblies").select("*").order("created_at", { ascending: false });
+  if (error){ toast("Failed to load assemblies: " + error.message, true); return; }
+  assemblies = data || [];
+  renderBoard();
+}
+
+function renderBoard(){
+  const wrap = $("#boardTableWrap");
+  if (assemblies.length === 0){
+    wrap.innerHTML = `<div class="empty-state"><h3>No assemblies yet</h3><p>Create one manually, or upload a Master BOM PDF once an assembly exists to auto-populate its BOM tree.</p></div>`;
+    return;
+  }
+  let rows = assemblies.map(a => `
+    <tr data-id="${a.id}">
+      <td class="assembly-num">${esc(a.assembly_number)}</td>
+      <td class="assembly-name">${esc(a.assembly_name)}</td>
+      <td>${esc(a.client) || "&mdash;"}</td>
+      <td><span class="status-pill status-${esc(a.status)}">${esc(statusLabel(a.status))}</span></td>
+      <td>${esc(a.current_rev) || "&mdash;"}</td>
+      <td>${a.tare_wt_kg != null ? fmtNum(a.tare_wt_kg) + " kg" : "&mdash;"}</td>
+      <td>${esc(a.drawn_by) || "&mdash;"}</td>
+    </tr>`).join("");
+  wrap.innerHTML = `
+    <table class="board-table">
+      <thead><tr>
+        <th>Assembly #</th><th>Assembly Name</th><th>Client</th><th>Status</th><th>Rev</th><th>Tare Wt</th><th>Drawn By</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  $all("#boardTableWrap tbody tr").forEach(tr => {
+    tr.addEventListener("click", () => openDrawer(tr.dataset.id));
+  });
+}
+
+function statusLabel(s){
+  return ({draft:"Draft", in_progress:"In Progress", ifc:"IFC", on_hold:"On Hold", superseded:"Superseded"})[s] || s;
+}
+
+// New assembly modal
+$("#newAssemblyBtn").addEventListener("click", () => {
+  $("#newAsmNumber").value = ""; $("#newAsmName").value = ""; $("#newAsmClient").value = "";
+  $("#modalOverlay").classList.add("open");
+});
+$("#modalCancelBtn").addEventListener("click", () => $("#modalOverlay").classList.remove("open"));
+$("#modalCreateBtn").addEventListener("click", async () => {
+  const assembly_number = $("#newAsmNumber").value.trim();
+  const assembly_name = $("#newAsmName").value.trim();
+  const client = $("#newAsmClient").value.trim();
+  if (!assembly_number || !assembly_name){ toast("Assembly number and name are required.", true); return; }
+  const { data, error } = await sb.from("assemblies").insert({
+    assembly_number, assembly_name, client: client || null
+  }).select().single();
+  if (error){ toast("Failed to create: " + error.message, true); return; }
+  $("#modalOverlay").classList.remove("open");
+  await loadAssemblies();
+  toast("Assembly created.");
+  openDrawer(data.id);
+});
+
+// =====================================================================
+// DRAWER
+// =====================================================================
+async function openDrawer(id){
+  const { data: asm, error } = await sb.from("assemblies").select("*").eq("id", id).single();
+  if (error){ toast("Failed to load assembly: " + error.message, true); return; }
+  selectedAssembly = asm;
+  await loadDrawerData();
+  renderDrawerHeader();
+  activeTab = "bom";
+  $all(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === "bom"));
+  renderDrawerBody();
+  $("#drawer").classList.add("open");
+  $("#overlay").classList.add("open");
+}
+
+async function loadDrawerData(){
+  const aid = selectedAssembly.id;
+  const [bn, rv, at] = await Promise.all([
+    sb.from("bom_nodes").select("*").eq("assembly_id", aid).order("sort_order"),
+    sb.from("revisions").select("*").eq("assembly_id", aid).order("created_at", { ascending: false }),
+    sb.from("attachments").select("*").eq("assembly_id", aid).order("uploaded_at", { ascending: false })
+  ]);
+  bomNodes = bn.data || [];
+  revisions = rv.data || [];
+  attachments = at.data || [];
+}
+
+function renderDrawerHeader(){
+  const a = selectedAssembly;
+  $("#drawerTitle").innerHTML = `<span class="mono">${esc(a.assembly_number)}</span> â ${esc(a.assembly_name)}`;
+  $("#drawerSub").textContent = (a.client ? a.client + " Â· " : "") + "Rev " + (a.current_rev || "â");
+  $("#metaStatus").innerHTML = ["draft","in_progress","ifc","on_hold","superseded"]
+    .map(s => `<option value="${s}" ${s===a.status?"selected":""}>${statusLabel(s)}</option>`).join("");
+  $("#metaClient").value = a.client || "";
+  $("#metaRev").value = a.current_rev || "";
+  $("#metaWeight").value = a.tare_wt_kg != null ? a.tare_wt_kg : "";
+}
+
+async function saveMetaField(field, value){
+  const { error } = await sb.from("assemblies").update({ [field]: value }).eq("id", selectedAssembly.id);
+  if (error){ toast("Save failed: " + error.message, true); return; }
+  selectedAssembly[field] = value;
+  const idx = assemblies.findIndex(x => x.id === selectedAssembly.id);
+  if (idx >= 0) assemblies[idx] = { ...assemblies[idx], [field]: value };
+  renderBoard();
+}
+$("#metaStatus").addEventListener("change", e => saveMetaField("status", e.target.value));
+$("#metaClient").addEventListener("change", e => saveMetaField("client", e.target.value || null));
+$("#metaRev").addEventListener("change", e => saveMetaField("current_rev", e.target.value || null));
+$("#metaWeight").addEventListener("change", e => saveMetaField("tare_wt_kg", e.target.value ? Number(e.target.value) : null));
+
+$("#drawerCloseBtn").addEventListener("click", closeDrawer);
+$("#overlay").addEventListener("click", closeDrawer);
+function closeDrawer(){
+  $("#drawer").classList.remove("open");
+  $("#overlay").classList.remove("open");
+  selectedAssembly = null;
+}
+
+$all(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    activeTab = tab.dataset.tab;
+    $all(".tab").forEach(t => t.classList.toggle("active", t === tab));
+    renderDrawerBody();
+  });
+});
+
+function renderDrawerBody(){
+  if (activeTab === "bom") renderBomTab();
+  else if (activeTab === "revisions") renderRevisionsTab();
+  else renderAttachmentsTab();
+}
+
+// ---------------- BOM Tab ----------------
+let collapsedNodes = new Set();
+
+function renderBomTab(){
+  const body = $("#drawerBody");
+  if (bomNodes.length === 0){
+    body.innerHTML = `<div class="empty-bom">No BOM data yet. Go to the <b>Attachments</b> tab and upload a Master BOM PDF to auto-populate this tree.</div>`;
+    return;
+  }
+  const byParent = {};
+  bomNodes.forEach(n => {
+    const key = n.parent_id || "root";
+    (byParent[key] = byParent[key] || []).push(n);
+  });
+  Object.values(byParent).forEach(list => list.sort((a,b) => (a.sort_order||0) - (b.sort_order||0)));
+
+  const rootNodes = byParent["root"] || [];
+  const byCategory = {};
+  rootNodes.forEach(n => {
+    const cat = n.category || "other";
+    (byCategory[cat] = byCategory[cat] || []).push(n);
+  });
+
+  let html = "";
+  CATEGORY_ORDER.forEach(cat => {
+    const nodes = byCategory[cat];
+    if (!nodes || nodes.length === 0) return;
+    html += `<div class="category-band cat-${cat}">${CATEGORY_LABELS[cat]}</div>`;
+    html += `<table class="bom-table"><thead><tr>
+      <th style="width:5%">#</th><th style="width:22%">Sub-Assembly / Part Name</th><th style="width:20%">Description</th>
+      <th style="width:8%">Mat'l</th><th style="width:9%">Length (mm)</th><th style="width:5%">Qty</th>
+      <th style="width:10%">NetSuite Code</th><th style="width:15%">Remarks</th>
+    </tr></thead><tbody>`;
+    nodes.forEach(n => { html += renderNodeRow(n, byParent, 0); });
+    html += `</tbody></table>`;
+  });
+  body.innerHTML = html;
+
+  $all(".toggle").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (collapsedNodes.has(id)) collapsedNodes.delete(id); else collapsedNodes.add(id);
+      renderBomTab();
+    });
+  });
+}
+
+function renderNodeRow(node, byParent, depth){
+  const children = byParent[node.id] || [];
+  const hasChildren = children.length > 0;
+  const collapsed = collapsedNodes.has(node.id);
+  const indentPx = depth * 20;
+  let row;
+  if (node.node_type === "sub_assembly"){
+    row = `<tr class="group-row" data-id="${node.id}">
+      <td class="mono">${esc(node.item_no)||""}</td>
+      <td><span class="indent" style="margin-left:${indentPx}px"></span>${hasChildren ? `<span class="toggle" data-id="${node.id}">${collapsed?"&#9656;":"&#9662;"}</span>` : `<span class="toggle"></span>`}${esc(node.part_number)}</td>
+      <td colspan="6">${esc(node.description)||""}</td>
+    </tr>`;
+  } else {
+    row = `<tr class="item-row" data-id="${node.id}">
+      <td class="mono">${esc(node.item_no)||""}</td>
+      <td><span class="indent" style="margin-left:${indentPx+14}px"></span>${esc(node.part_number)||""}</td>
+      <td>${esc(node.description)||""}</td>
+      <td>${esc(node.material)||""}</td>
+      <td class="mono">${node.length_mm != null ? fmtNum(node.length_mm) : ""}</td>
+      <td class="mono">${node.qty != null ? fmtNum(node.qty) : ""}</td>
+      <td class="mono">${esc(node.netsuite_code)||""}</td>
+      <td>${esc(node.remarks)||""}</td>
+    </tr>`;
+  }
+  let out = row;
+  if (hasChildren && !collapsed){
+    children.forEach(c => { out += renderNodeRow(c, byParent, depth+1); });
+  }
+  return out;
+}
+
+// ---------------- Revisions Tab ----------------
+function renderRevisionsTab(){
+  const body = $("#drawerBody");
+  let rows = revisions.map(r => `
+    <tr>
+      <td><span class="rev-badge">${esc(r.rev_number)}</span></td>
+      <td>${esc(r.part_number) || "Whole assembly"}</td>
+      <td>${esc(r.details)}</td>
+      <td>${r.date_approved ? esc(r.date_approved) : ""}</td>
+      <td>${esc(r.drafted_by)||""}</td>
+      <td>${esc(r.checked_by)||""}</td>
+      <td>${esc(r.approved_by)||""}</td>
+    </tr>`).join("");
+  body.innerHTML = `
+    <div class="section-title">Revision History
+      <button class="small-btn" id="addRevBtn">+ Add revision</button>
+    </div>
+    ${revisions.length === 0 ? `<div class="empty-bom">No revisions logged yet. Upload the Revision History PDF from the Attachments tab, or add one manually.</div>` : `
+    <table class="rev-table"><thead><tr>
+      <th>Rev</th><th>Part</th><th>Details</th><th>Date Approved</th><th>Drafted</th><th>Checked</th><th>Approved</th>
+    </tr></thead><tbody>${rows}</tbody></table>`}
+  `;
+  $("#addRevBtn")?.addEventListener("click", addRevisionPrompt);
+}
+
+async function addRevisionPrompt(){
+  const rev_number = prompt("Revision number (e.g. 04):");
+  if (!rev_number) return;
+  const details = prompt("Revision details:");
+  if (!details) return;
+  const part_number = prompt("Part revised (leave blank for whole assembly):") || null;
+  const { error } = await sb.from("revisions").insert({
+    assembly_id: selectedAssembly.id, rev_number, details, part_number
+  });
+  if (error){ toast("Failed to add revision: " + error.message, true); return; }
+  await loadDrawerData();
+  renderRevisionsTab();
+  toast("Revision added.");
+}
+
+// ---------------- Attachments Tab ----------------
+function renderAttachmentsTab(){
+  const body = $("#drawerBody");
+  let rows = attachments.map(a => `
+    <tr>
+      <td>${esc(a.file_name)}</td>
+      <td>${esc((a.file_type||"").toUpperCase())}</td>
+      <td>${esc(docKindLabel(a.doc_kind))}</td>
+      <td><span class="parse-badge parse-${esc(a.parse_status)}">${esc(a.parse_status)}</span></td>
+      <td>${esc(a.parse_notes)||""}</td>
+    </tr>`).join("");
+  body.innerHTML = `
+    <div class="section-title">Attachments</div>
+    <div class="upload-zone" id="uploadZone">
+      <div>Drag &amp; drop PDF or DXF files here, or <label class="linklike" style="cursor:pointer;text-decoration:underline;">browse<input type="file" id="fileInput" multiple accept=".pdf,.dxf"></label></div>
+      <div style="margin-top:6px;font-size:12px;">Master BOM PDFs auto-populate the BOM tree. Revision History PDFs auto-populate the Revisions tab. Full Assembly reference and Standard Parts PDFs, and all DXF files, are stored for reference (parsed manually for now).</div>
+    </div>
+    <div id="uploadProgress"></div>
+    ${attachments.length === 0 ? `<div class="empty-bom">No files uploaded yet.</div>` : `
+    <table class="att-table"><thead><tr><th>File</th><th>Type</th><th>Doc Kind</th><th>Parse Status</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody></table>`}
+  `;
+  const zone = $("#uploadZone");
+  const input = $("#fileInput");
+  input.addEventListener("change", e => handleFiles(e.target.files));
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault(); zone.classList.remove("dragover");
+    handleFiles(e.dataTransfer.files);
+  });
+}
+
+function docKindLabel(k){
+  return ({full_assy:"Full Assembly", master_bom:"Master BOM", revision_history:"Revision History",
+    standard_parts:"Standard Parts", part_drawing:"Part Drawing", other:"Other"})[k] || "Unclassified";
+}
+
+async function handleFiles(fileList){
+  const files = Array.from(fileList);
+  for (const file of files){
+    await processAndUploadFile(file);
+  }
+  await loadDrawerData();
+  renderAttachmentsTab();
+}
+
+async function processAndUploadFile(file){
+  const progressEl = $("#uploadProgress");
+  const ext = file.name.split(".").pop().toLowerCase();
+  const fileType = ext === "dxf" ? "dxf" : "pdf";
+  progressEl.innerHTML = `<div class="empty-bom">Uploading ${esc(file.name)}...</div>`;
+
+  const storagePath = `${selectedAssembly.assembly_number}/${Date.now()}_${file.name}`;
+  const { error: upErr } = await sb.storage.from("assembly-drawings").upload(storagePath, file);
+  if (upErr){ toast("Upload failed for " + file.name + ": " + upErr.message, true); return; }
+
+  let docKind = "other";
+  let parseStatus = "manual";
+  let parseNotes = "";
+
+  if (fileType === "pdf"){
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+      const pages = await extractPdfPages(pdfDoc);
+      const fullText = pages.map(p => p.rawText).join("\n");
+
+      if (/BILL OF MATERIALS/i.test(fullText) && /ORDER SUMMARY|SHEETMETAL|WELDMENTS|FASTENERS/i.test(fullText)){
+        docKind = "master_bom";
+        const result = parseMasterBom(pages);
+        if (result.items.length > 0){
+          const applyResult = await applyMasterBomResult(result);
+          if (applyResult.error){
+            parseStatus = "failed";
+            parseNotes = `Parsed ${applyResult.totalCount} items but save failed: ${applyResult.error}`;
+          } else {
+            parseStatus = "parsed";
+            parseNotes = `${applyResult.insertedCount} line items imported`;
+          }
+        } else {
+          parseStatus = "failed";
+          parseNotes = "No detail section recognized";
+        }
+      } else if (/FULL REVISION HISTORY|REVISION HISTORY/i.test(fullText) && /Drafted/i.test(fullText)){
+        docKind = "revision_history";
+        const result = parseRevisionHistory(pages);
+        if (result.length > 0){
+          await applyRevisionHistoryResult(result);
+          parseStatus = "parsed";
+          parseNotes = `${result.length} revisions imported`;
+        } else {
+          parseStatus = "failed";
+          parseNotes = "Could not parse revision rows";
+        }
+      } else {
+        // Full Assembly reference docs and Standard Parts library docs both contain a mix
+        // of "ASSEMBLY DRAWING REFERENCE" and "PART DRAWING REFERENCE" pages (a full assembly
+        // package is mostly its own constituent part drawings), so page-content alone can't
+        // reliably tell them apart. The filename convention Chris already uses is a much
+        // stronger signal, so check that first and fall back to content only if unclear.
+        const nameNorm = file.name.toUpperCase().replace(/[_\-]+/g, " ");
+        if (/FULL\s*ASS(Y|EMBLY)/.test(nameNorm)){
+          docKind = "full_assy";
+        } else if (/STANDARD\s*PARTS?/.test(nameNorm)){
+          docKind = "standard_parts";
+        } else if (/ASSEMBLY DRAWING REFERENCE/i.test(fullText)){
+          docKind = "full_assy";
+        } else if (/PART DRAWING REFERENCE/i.test(fullText)){
+          docKind = "standard_parts";
+        }
+        parseStatus = "manual";
+        parseNotes = docKind === "other"
+          ? "Unrecognized document - stored for reference"
+          : "Reference drawing - stored for viewing, not auto-parsed yet";
+      }
+    } catch (e){
+      parseStatus = "failed";
+      parseNotes = "Parse error: " + e.message;
+    }
+  } else {
+    parseNotes = "DXF stored for reference (not parsed)";
+  }
+
+  const { error: insErr } = await sb.from("attachments").insert({
+    assembly_id: selectedAssembly.id, file_name: file.name, file_type: fileType,
+    doc_kind: docKind, storage_path: storagePath, parse_status: parseStatus,
+    parse_notes: parseNotes, uploaded_by: currentUser.id
+  });
+  if (insErr){ toast("Failed to record attachment: " + insErr.message, true); return; }
+  progressEl.innerHTML = "";
+  toast(`${file.name}: ${parseNotes || parseStatus}`);
+}
+
+// =====================================================================
+// PDF TEXT EXTRACTION (pdf.js -> normalized token rows per page)
+// =====================================================================
+async function extractPdfPages(pdfDoc){
+  const pages = [];
+  for (let i = 1; i <= pdfDoc.numPages; i++){
+    const page = await pdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const tokens = content.items.map(item => ({
+      text: item.str,
+      x: item.transform[4],
+      top: viewport.height - item.transform[5]
+    })).filter(t => t.text.trim().length > 0);
+    // group into rows by rounded 'top'
+    const rowMap = {};
+    tokens.forEach(t => {
+      const key = Math.round(t.top / 3) * 3; // tolerance grouping
+      (rowMap[key] = rowMap[key] || []).push(t);
+    });
+    const rowKeys = Object.keys(rowMap).map(Number).sort((a,b) => a-b);
+    const rows = rowKeys.map(k => {
+      const r = rowMap[k].sort((a,b) => a.x - b.x);
+      r.rowTop = k;
+      return r;
+    });
+    const rawText = rows.map(r => r.map(t => t.text).join(" ")).join("\n");
+    pages.push({ pageNum: i, rows, rawText });
+  }
+  return pages;
+}
+
+// =====================================================================
+// MASTER BOM PARSER
+// Detail sections are the ones headed by a BARE category name
+// (SHEETMETAL / WELDMENTS / FASTENERS & FITTINGS / LABELS & STICKERS).
+// Any header containing ORDER SUMMARY / PROCUREMENT / BAR / CUTTING PLAN /
+// REMAINING GROUPS is a derived rollup and is skipped.
+// =====================================================================
+const CATEGORY_MAP = {
+  "SHEETMETAL": "sheetmetal",
+  "WELDMENTS": "weldment",
+  "FASTENERS & FITTINGS": "fastener",
+  "LABELS & STICKERS": "label"
+};
+const SKIP_MARKERS = ["ORDER SUMMARY","PROCUREMENT","BAR","CUTTING PLAN","REMAINING GROUPS","NOTE 1","NOTE 2","NOTE 3","NOTE 4","NOTE 5","NOTE 6"];
+
+function colBucket(x){
+  if (x < 50) return "itemNo";
+  if (x < 260) return "partName";
+  if (x < 528) return "description";
+  if (x < 578) return "material";
+  if (x < 636) return "length";
+  if (x < 670) return "qty";
+  if (x < 752) return "netsuite";
+  return "remarks";
+}
+
+function joinBucket(rowTokens, bucket){
+  return rowTokens.filter(t => colBucket(t.x) === bucket).map(t => t.text).join(" ").trim();
+}
+
+function extractAssemblyMeta(pages){
+  const meta = {};
+  const text = pages[0] ? pages[0].rawText : "";
+  const grab = (label) => {
+    const re = new RegExp(label + "\\s*:?\\s*([^\\n]*)", "i");
+    const m = text.match(re);
+    return m ? m[1].trim() : null;
+  };
+  const codeMatch = text.match(/CODE:\s*([A-Z0-9]+)/i);
+  if (codeMatch) meta.assembly_number = codeMatch[1].trim();
+  const revMatch = text.match(/REV:\s*([0-9]+\s*-?\s*[A-Z]*)/i);
+  if (revMatch) meta.current_rev = revMatch[1].replace(/\s+/g," ").trim();
+  const descMatch = text.match(/DESCRIPTION:\s*([^\n]*?)\s*DRAWN:/i);
+  if (descMatch) meta.assembly_name = descMatch[1].trim();
+  const drawnMatch = text.match(/DRAWN:\s*([^\n]*)/i);
+  if (drawnMatch) meta.drawn_by = drawnMatch[1].trim();
+  const checkedMatch = text.match(/CHECKED:\s*([^\n]*)/i);
+  if (checkedMatch) meta.checked_by = checkedMatch[1].trim();
+  const approvedMatch = text.match(/APPROVED:\s*([^\n]*)/i);
+  if (approvedMatch) meta.approved_by = approvedMatch[1].trim();
+  const clientMatch = text.match(/CLIENT:\s*([^\n]*?)\s*CHECKED:/i);
+  if (clientMatch && clientMatch[1].trim()) meta.client = clientMatch[1].trim();
+  return meta;
+}
+
+function parseMasterBom(pages){
+  const meta = extractAssemblyMeta(pages);
+  const items = []; // flat list: {tempId, parentTempId, node_type, item_no, part_number, description, material, length_mm, qty, netsuite_code, remarks, category, sort_order}
+  let mode = "skip";
+  let currentCategory = null;
+  let currentGroupNode = null;
+  let sortCounter = 0;
+  let tempIdCounter = 0;
+
+  function newTempId(){ return "tmp" + (tempIdCounter++); }
+
+  pages.forEach(page => {
+    let pageHasSkipMarker = false; // reset per page; prevents bare category names that
+                                   // appear INSIDE a procurement rollup (e.g. "ORDER SUMMARY -
+                                   // REMAINING GROUPS" listing "FASTENERS & FITTINGS" as a plain
+                                   // sub-label) from incorrectly re-entering detail mode. True
+                                   // detail pages never contain a skip marker before their
+                                   // category headers, so this only suppresses the false case.
+    page.rows.forEach(row => {
+      if (row.length === 0) return;
+      const lineText = row.map(t => t.text).join(" ").replace(/\s+/g," ").trim();
+      const upper = lineText.toUpperCase();
+
+      // skip boilerplate rows
+      if (/^BILL OF MATERIALS$/i.test(lineText)) return;
+      if (/^ATRADA\s*\|/i.test(lineText)) return;
+      if (/^#\s*SUB-ASSEMBLY/i.test(lineText)) return;
+      if (/^(DESCRIPTION|CLIENT|ASSEMBLY NAME|SO\s*#|CODE|DATE)\s*:/i.test(lineText)) return;
+      if (/^NOTE\s*\d/i.test(lineText)) return;
+      if (/^Generated:/i.test(lineText)) return;
+
+      const firstToken = row[0];
+      const isItemRow = /^\d+$/.test(firstToken.text) && firstToken.x < 50;
+
+      if (isItemRow){
+        if (mode !== "detail") return; // ignore item rows while in a skip section
+        const item_no = firstToken.text;
+        const part_number = joinBucket(row, "partName");
+        const description = joinBucket(row, "description");
+        const material = joinBucket(row, "material");
+        const lengthStr = joinBucket(row, "length");
+        const qtyStr = joinBucket(row, "qty");
+        const netsuite_code = joinBucket(row, "netsuite");
+        const remarks = joinBucket(row, "remarks");
+        const length_mm = lengthStr ? parseFloat(lengthStr.replace(/[^0-9.]/g,"")) : null;
+        const qty = qtyStr ? parseFloat(qtyStr.replace(/[^0-9.]/g,"")) : 1;
+        items.push({
+          tempId: newTempId(),
+          parentTempId: currentGroupNode ? currentGroupNode.tempId : null, // no group header -> root-level item, grouped visually by 'category'
+          node_type: "item",
+          item_no, part_number, description,
+          material: material || null,
+          length_mm: (length_mm !== null && !Number.isNaN(length_mm)) ? length_mm : null,
+          qty: Number.isNaN(qty) ? 1 : qty,
+          netsuite_code: netsuite_code || null,
+          remarks: remarks || null,
+          category: currentCategory,
+          sort_order: sortCounter++
+        });
+        return;
+      }
+
+      // header-type row (not an item row)
+      const isBareCategory = Object.prototype.hasOwnProperty.call(CATEGORY_MAP, upper) && !pageHasSkipMarker;
+      const isSkipMarker = SKIP_MARKERS.some(m => upper.includes(m));
+
+      if (isSkipMarker){
+        mode = "skip";
+        pageHasSkipMarker = true;
+        return;
+      }
+
+      if (isBareCategory){
+        // Category is a pure grouping label (rendered as a colored band in the UI),
+        // NOT a tree node - it never gets inserted into bom_nodes. Only sub-assembly
+        // groups and items are real rows, always at root level or under a group.
+        mode = "detail";
+        currentCategory = CATEGORY_MAP[upper];
+        currentGroupNode = null;
+        return;
+      }
+
+      // otherwise: sub-assembly / part group header, only meaningful in detail mode
+      if (mode === "detail"){
+        currentGroupNode = {
+          tempId: newTempId(),
+          parentTempId: null, // groups are root-level nodes, grouped visually by 'category'
+          node_type: "sub_assembly",
+          item_no: null, part_number: lineText, description: null,
+          material: null, length_mm: null, qty: 1, netsuite_code: null, remarks: null,
+          category: currentCategory, sort_order: sortCounter++
+        };
+        items.push(currentGroupNode);
+      }
+    });
+  });
+
+  return { meta, items };
+}
+
+async function applyMasterBomResult(result){
+  const { meta, items } = result;
+
+  // Update assembly meta (only fill blanks, don't clobber manual edits silently â but rev/description are authoritative from doc)
+  const updateFields = {};
+  if (meta.current_rev) updateFields.current_rev = meta.current_rev;
+  if (meta.assembly_name) updateFields.assembly_name = meta.assembly_name;
+  if (meta.drawn_by) updateFields.drawn_by = meta.drawn_by;
+  if (meta.checked_by) updateFields.checked_by = meta.checked_by;
+  if (meta.approved_by) updateFields.approved_by = meta.approved_by;
+  if (meta.client) updateFields.client = meta.client;
+  if (Object.keys(updateFields).length > 0){
+    await sb.from("assemblies").update(updateFields).eq("id", selectedAssembly.id);
+  }
+
+  // Replace existing bom_nodes for this assembly
+  await sb.from("bom_nodes").delete().eq("assembly_id", selectedAssembly.id);
+
+  // Insert nodes level by level, resolving tempId -> real id, since parent_id must reference existing rows
+  const tempToReal = {};
+  let insertedCount = 0;
+  // Build dependency order: nodes whose parentTempId is null first, then resolve iteratively
+  const remaining = [...items];
+  let guard = 0;
+  while (remaining.length > 0 && guard < 20){
+    guard++;
+    const batch = [];
+    for (let i = remaining.length - 1; i >= 0; i--){
+      const n = remaining[i];
+      if (n.parentTempId === null || tempToReal[n.parentTempId] !== undefined){
+        batch.push(n);
+        remaining.splice(i, 1);
+      }
+    }
+    if (batch.length === 0) break;
+    const insertRows = batch.map(n => ({
+      assembly_id: selectedAssembly.id,
+      parent_id: n.parentTempId ? tempToReal[n.parentTempId] : null,
+      node_type: n.node_type,
+      item_no: n.item_no,
+      part_number: n.part_number,
+      description: n.description,
+      material: n.material,
+      category: n.category,
+      length_mm: n.length_mm,
+      qty: n.qty,
+      netsuite_code: n.netsuite_code,
+      remarks: n.remarks,
+      sort_order: n.sort_order
+    }));
+    const { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
+    if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
+    data.forEach((row, idx) => { tempToReal[batch[idx].tempId] = row.id; });
+    insertedCount += data.length;
+  }
+  if (remaining.length > 0){
+    // Some nodes never resolved a parent - shouldn't happen, but surface it rather than
+    // silently reporting success for a partially-imported tree.
+    return { insertedCount, totalCount: items.length, error: `${remaining.length} node(s) could not be attached to a parent` };
+  }
+  return { insertedCount, totalCount: items.length, error: null };
+}
+
+// =====================================================================
+// REVISION HISTORY PARSER
+// =====================================================================
+function revColBucket(x){
+  if (x < 62) return "rev";
+  if (x < 130) return "draftedBy";
+  if (x < 200) return "draftedDate";
+  if (x < 262) return "checkedBy";
+  if (x < 400) return "checkDate";
+  if (x < 578) return "partRevised";
+  if (x < 945) return "details";
+  return "reason";
+}
+function joinRevBucket(rowTokens, bucket){
+  return rowTokens.filter(t => revColBucket(t.x) === bucket).map(t => t.text).join(" ").trim();
+}
+
+function parseRevisionHistory(pages){
+  const LOOKAHEAD = 12; // pt tolerance: a tall "Details" cell's first line can render
+                        // slightly ABOVE its own row's Rev# marker line, since short
+                        // cells in that row appear bottom-aligned while multi-line
+                        // cells start-align at the row's top. Verified against the
+                        // real TMSB201 revision history PDF.
+  const rowsInOrder = [];
+  pages.forEach(page => {
+    page.rows.forEach(row => {
+      if (row.length === 0) return;
+      const lineText = row.map(t => t.text).join(" ").trim();
+      if (/^Rev\.?:?\s*#/i.test(lineText)) return;
+      if (/^FULL REVISION HISTORY$/i.test(lineText)) return;
+      if (/^(SO\s*#|CODE|CLIENT|ASSEMBLY NAME|DESCRIPTION)\s*:/i.test(lineText)) return;
+      if (/^\d+$/.test(lineText.trim()) && row.length === 1) return;
+      rowsInOrder.push(row);
+    });
+  });
+
+  const isMarkerRow = (row) => /^\d+$/.test(row[0].text) && row[0].x < 62;
+  const markers = rowsInOrder.filter(isMarkerRow);
+  const markerTops = markers.map(r => r.rowTop);
+
+  function assignGroupIndex(y){
+    let best = -1;
+    for (let i = 0; i < markerTops.length; i++){
+      if (markerTops[i] - LOOKAHEAD <= y) best = i;
+    }
+    return best;
+  }
+
+  const groups = markers.map(() => []);
+  rowsInOrder.forEach(row => {
+    const markerIdx = markers.indexOf(row);
+    const groupIdx = markerIdx !== -1 ? markerIdx : assignGroupIndex(row.rowTop);
+    if (groupIdx === -1) return;
+    groups[groupIdx].push(row);
+  });
+
+  const revisionsOut = markers.map((markerRow, i) => {
+    const rows = [...groups[i]].sort((a,b) => a.rowTop - b.rowTop);
+    const rev_number = markerRow[0].text;
+    const drafted_by = joinRevBucket(markerRow, "draftedBy").replace(/^-$/,"") || null;
+    const date_raw = joinRevBucket(markerRow, "draftedDate").replace(/^-$/,"") || null;
+    const checked_by = joinRevBucket(markerRow, "checkedBy").replace(/^-$/,"") || null;
+    const part_number = rows.map(r => joinRevBucket(r, "partRevised")).filter(Boolean).join(" ").trim();
+    const details = rows.map(r => joinRevBucket(r, "details")).filter(Boolean).join(" ").trim();
+    return {
+      rev_number,
+      part_number: part_number || null,
+      details,
+      date_approved: parseDateLoose(date_raw),
+      drafted_by,
+      checked_by,
+      approved_by: null
+    };
+  });
+
+  return revisionsOut.filter(r => r.details && r.details.trim().length > 0);
+}
+
+function parseDateLoose(s){
+  if (!s) return null;
+  const months = {jan:"01",feb:"02",mar:"03",apr:"04",may:"05",jun:"06",jul:"07",aug:"08",sep:"09",oct:"10",nov:"11",dec:"12"};
+  const m = s.match(/(\d{1,2})[-\s]([A-Za-z]{3,})[-\s](\d{4})/);
+  if (m){
+    const mon = months[m[2].toLowerCase().slice(0,3)];
+    if (mon) return `${m[3]}-${mon}-${m[1].padStart(2,"0")}`;
+  }
+  return null;
+}
+
+async function applyRevisionHistoryResult(parsedRevisions){
+  // Replace existing revisions for this assembly with freshly parsed ones
+  await sb.from("revisions").delete().eq("assembly_id", selectedAssembly.id);
+  const rows = parsedRevisions.map(r => ({
+    assembly_id: selectedAssembly.id,
+    part_number: r.part_number,
+    rev_number: r.rev_number,
+    details: r.details,
+    date_approved: r.date_approved,
+    drafted_by: r.drafted_by,
+    checked_by: r.checked_by,
+    approved_by: r.approved_by
+  }));
+  if (rows.length > 0){
+    const { error } = await sb.from("revisions").insert(rows);
+    if (error){ toast("Revision import error: " + error.message, true); }
+  }
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+initAuth();
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atrada Assembly Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root{
   --navy:#172b4d; --blue:#0073ea; --blue-light:#e6f1fd;
