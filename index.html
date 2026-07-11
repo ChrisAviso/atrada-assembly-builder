@@ -93,6 +93,37 @@ td.assembly-name{color:var(--navy);}
 .drawer-header .sub{color:var(--grey-text);font-size:13px;}
 .drawer-close{background:none;border:1px solid var(--grey-border);width:30px;height:30px;border-radius:8px;font-size:18px;color:var(--grey-text);line-height:1;flex-shrink:0;}
 .drawer-close:hover{background:var(--grey-bg);color:var(--navy);}
+.drawer-header-actions{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.drawer-header-actions .small-btn{white-space:nowrap;}
+
+/* ---------- Print Master BOM ---------- */
+#printView{display:none;}
+@media print{
+  body *{visibility:hidden;}
+  #printView, #printView *{visibility:visible;}
+  #printView{display:block;position:absolute;top:0;left:0;width:100%;margin:0;padding:0;}
+  @page{margin:14mm;}
+}
+.print-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:18px;}
+.print-brand{font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--navy);}
+.print-brand .dot{color:var(--blue);}
+.print-doctitle{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--blue);text-transform:uppercase;text-align:right;}
+.print-doctitle .big{display:block;font-family:var(--font-sans);font-size:20px;font-weight:700;color:var(--navy);letter-spacing:-.01em;text-transform:none;margin-top:2px;}
+.print-titleblock{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--navy);margin-bottom:22px;}
+.print-titleblock .ptf{padding:8px 12px;border-left:1px solid var(--grey-border);border-bottom:1px solid var(--grey-border);}
+.print-titleblock .ptf:nth-child(4n+1){border-left:none;}
+.print-titleblock .ptf label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--grey-text);font-weight:600;margin-bottom:3px;}
+.print-titleblock .ptf div{font-family:var(--font-mono);font-size:13px;color:var(--navy);}
+.print-cat-band{background:var(--other);color:#fff;font-family:var(--font-mono);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 10px;margin:16px 0 0;break-after:avoid;}
+.print-cat-band.cat-sheetmetal{background:var(--sheetmetal);}
+.print-cat-band.cat-weldment{background:var(--weldment);}
+.print-cat-band.cat-fastener{background:var(--fastener);}
+.print-cat-band.cat-label{background:var(--label);}
+table.print-bom-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:2px;}
+table.print-bom-table th{text-align:left;background:#eee;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;padding:5px 8px;border:1px solid #ccc;}
+table.print-bom-table td{padding:4px 8px;border:1px solid #ddd;vertical-align:top;}
+table.print-bom-table tr.print-group-row td{background:#f2f2f2;font-weight:700;}
+.print-footer{margin-top:22px;padding-top:8px;border-top:1px solid var(--grey-border);font-size:9.5px;color:var(--grey-text);display:flex;justify-content:space-between;}
 
 /* Title-block meta strip: bordered cells, small-caps labels, mono values */
 .meta-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--grey-border);border-radius:8px;overflow:hidden;margin-bottom:18px;background:var(--grey-bg);}
@@ -206,7 +237,10 @@ table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1
         <h2 id="drawerTitle">-</h2>
         <div class="sub" id="drawerSub">-</div>
       </div>
-      <button class="drawer-close" id="drawerCloseBtn">&times;</button>
+      <div class="drawer-header-actions">
+        <button class="small-btn" id="printBomBtn">&#128424; Print Master BOM</button>
+        <button class="drawer-close" id="drawerCloseBtn">&times;</button>
+      </div>
     </div>
     <div class="meta-grid">
       <div class="meta-field"><label>Status</label><select id="metaStatus"></select></div>
@@ -239,6 +273,8 @@ table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1
     </div>
   </div>
 </div>
+
+<div id="printView"></div>
 
 <script>
 // =====================================================================
@@ -557,6 +593,100 @@ function renderNodeRow(node, byParent, depth){
   let out = row;
   if (hasChildren && !collapsed){
     children.forEach(c => { out += renderNodeRow(c, byParent, depth+1); });
+  }
+  return out;
+}
+
+// ---------------- Print Master BOM ----------------
+$("#printBomBtn").addEventListener("click", () => {
+  if (bomNodes.length === 0){ toast("No BOM data to print yet.", true); return; }
+  renderPrintView();
+  setTimeout(() => window.print(), 50);
+});
+
+function renderPrintView(){
+  const a = selectedAssembly;
+  const byParent = {};
+  bomNodes.forEach(n => {
+    const key = n.parent_id || "root";
+    (byParent[key] = byParent[key] || []).push(n);
+  });
+  Object.values(byParent).forEach(list => list.sort((x,y) => (x.sort_order||0) - (y.sort_order||0)));
+  const rootNodes = byParent["root"] || [];
+  const byCategory = {};
+  rootNodes.forEach(n => {
+    const cat = n.category || "other";
+    (byCategory[cat] = byCategory[cat] || []).push(n);
+  });
+
+  let tableHtml = "";
+  CATEGORY_ORDER.forEach(cat => {
+    const nodes = byCategory[cat];
+    if (!nodes || nodes.length === 0) return;
+    tableHtml += `<div class="print-cat-band cat-${cat}">${CATEGORY_LABELS[cat]}</div>`;
+    tableHtml += `<table class="print-bom-table"><thead><tr>
+      <th style="width:5%">#</th><th style="width:23%">Sub-Assembly / Part Name</th><th style="width:21%">Description</th>
+      <th style="width:8%">Mat'l</th><th style="width:9%">Length (mm)</th><th style="width:5%">Qty</th>
+      <th style="width:10%">NetSuite Code</th><th style="width:15%">Remarks</th>
+    </tr></thead><tbody>`;
+    nodes.forEach(n => { tableHtml += printNodeRow(n, byParent, 0); });
+    tableHtml += `</tbody></table>`;
+  });
+
+  const printedAt = new Date().toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  $("#printView").innerHTML = `
+    <div class="print-header">
+      <div class="print-brand"><span class="dot">&#9679;</span> Atrada</div>
+      <div class="print-doctitle">Assembly Record<span class="big">${esc(a.assembly_number)} — ${esc(a.assembly_name)}</span></div>
+    </div>
+    <div class="print-titleblock">
+      <div class="ptf"><label>Client</label><div>${esc(a.client)||"—"}</div></div>
+      <div class="ptf"><label>Status</label><div>${esc(statusLabel(a.status))}</div></div>
+      <div class="ptf"><label>Current Rev</label><div>${esc(a.current_rev)||"—"}</div></div>
+      <div class="ptf"><label>WLL</label><div>${a.wll_kg!=null?fmtNum(a.wll_kg)+" kg":"—"}</div></div>
+      <div class="ptf"><label>Tare Wt</label><div>${a.tare_wt_kg!=null?fmtNum(a.tare_wt_kg)+" kg":"—"}</div></div>
+      <div class="ptf"><label>Total Wt</label><div>${a.total_weight_kg!=null?fmtNum(a.total_weight_kg)+" kg":"—"}</div></div>
+      <div class="ptf"><label>Drawn By</label><div>${esc(a.drawn_by)||"—"}</div></div>
+      <div class="ptf"><label>Checked By</label><div>${esc(a.checked_by)||"—"}</div></div>
+      <div class="ptf"><label>Approved By</label><div>${esc(a.approved_by)||"—"}</div></div>
+      <div class="ptf"><label>Scale</label><div>${esc(a.scale)||"—"}</div></div>
+      <div class="ptf"><label>Printed</label><div>${printedAt}</div></div>
+      <div class="ptf"><label>Source</label><div>Atrada Assembly Builder</div></div>
+    </div>
+    ${tableHtml}
+    <div class="print-footer">
+      <span>Master BOM — ${esc(a.assembly_number)}</span>
+      <span>Generated from Atrada Assembly Builder</span>
+    </div>
+  `;
+}
+
+function printNodeRow(node, byParent, depth){
+  const children = byParent[node.id] || [];
+  const hasChildren = children.length > 0;
+  const indentPx = depth * 16;
+  let row;
+  if (node.node_type === "sub_assembly"){
+    row = `<tr class="print-group-row">
+      <td>${esc(node.item_no)||""}</td>
+      <td><span style="margin-left:${indentPx}px"></span>${esc(node.part_number)}</td>
+      <td colspan="6">${esc(node.description)||""}</td>
+    </tr>`;
+  } else {
+    row = `<tr>
+      <td>${esc(node.item_no)||""}</td>
+      <td><span style="margin-left:${indentPx+12}px"></span>${esc(node.part_number)||""}</td>
+      <td>${esc(node.description)||""}</td>
+      <td>${esc(node.material)||""}</td>
+      <td>${node.length_mm != null ? fmtNum(node.length_mm) : ""}</td>
+      <td>${node.qty != null ? fmtNum(node.qty) : ""}</td>
+      <td>${esc(node.netsuite_code)||""}</td>
+      <td>${esc(node.remarks)||""}</td>
+    </tr>`;
+  }
+  let out = row;
+  if (hasChildren){
+    children.forEach(c => { out += printNodeRow(c, byParent, depth+1); });
   }
   return out;
 }
