@@ -815,37 +815,63 @@ async function processAndUploadFile(file){
           parseStatus = "failed";
           parseNotes = "No detail section recognized";
         }
-      } else if (/FULL REVISION HISTORY|REVISION HISTORY/i.test(fullText) && /Drafted/i.test(fullText)){
-        docKind = "revision_history";
-        const result = parseRevisionHistory(pages);
-        if (result.length > 0){
-          await applyRevisionHistoryResult(result);
-          parseStatus = "parsed";
-          parseNotes = `${result.length} revisions imported`;
-        } else {
-          parseStatus = "failed";
-          parseNotes = "Could not parse revision rows";
-        }
       } else {
         // Full Assembly reference docs and Standard Parts library docs both contain a mix
-        // of "ASSEMBLY DRAWING REFERENCE" and "PART DRAWING REFERENCE" pages (a full assembly
-        // package is mostly its own constituent part drawings), so page-content alone can't
-        // reliably tell them apart. The filename convention Chris already uses is a much
-        // stronger signal, so check that first and fall back to content only if unclear.
+        // of "ASSEMBLY DRAWING REFERENCE" and "PART DRAWING REFERENCE" pages, AND every page's
+        // own title block carries a small "REVISION HISTORY" section with "Drafted" in it --
+        // so the old revision_history content check (below) would false-positive on almost any
+        // multi-page Atrada drawing before ever reaching this branch. Filename + content checks
+        // for full_assy/standard_parts must run FIRST; revision_history is checked only as a
+        // fallback, for documents that are genuinely dedicated revision-history sheets.
         const nameNorm = file.name.toUpperCase().replace(/[_\-]+/g, " ");
-        if (/FULL\s*ASS(Y|EMBLY)/.test(nameNorm)){
+        const looksFullAssy = /FULL\s*ASS(Y|EMBLY)/.test(nameNorm) || /ASSEMBLY DRAWING REFERENCE/i.test(fullText);
+        const looksStandardParts = /STANDARD\s*PARTS?/.test(nameNorm) || /PART DRAWING REFERENCE/i.test(fullText);
+
+        if (looksFullAssy){
           docKind = "full_assy";
-        } else if (/STANDARD\s*PARTS?/.test(nameNorm)){
+          const result = buildFullAssyTree(pages);
+          if (result.items.length > 0){
+            const applyResult = await applyMasterBomResult(result);
+            if (applyResult.error){
+              parseStatus = "failed";
+              parseNotes = `Parsed ${applyResult.totalCount} items but save failed: ${applyResult.error}`;
+            } else {
+              parseStatus = "parsed";
+              parseNotes = `${applyResult.insertedCount} line items auto-organized from cutting list`;
+            }
+          } else {
+            parseStatus = "manual";
+            parseNotes = "No CUTTING LIST & BOM table found - stored for reference";
+          }
+        } else if (looksStandardParts){
           docKind = "standard_parts";
-        } else if (/ASSEMBLY DRAWING REFERENCE/i.test(fullText)){
-          docKind = "full_assy";
-        } else if (/PART DRAWING REFERENCE/i.test(fullText)){
-          docKind = "standard_parts";
+          const records = parseStandardPartsPages(pages);
+          const applyResult = await applyStandardPartsResult(records);
+          if (applyResult.error){
+            parseStatus = "failed";
+            parseNotes = `Parsed ${applyResult.totalCount} parts but save failed: ${applyResult.error}`;
+          } else if (applyResult.insertedCount > 0){
+            parseStatus = "parsed";
+            parseNotes = `${applyResult.insertedCount} standard part(s) imported`;
+          } else {
+            parseStatus = "manual";
+            parseNotes = "No NetSuite codes recognized - stored for reference";
+          }
+        } else if (/FULL REVISION HISTORY|REVISION HISTORY/i.test(fullText) && /Drafted/i.test(fullText)){
+          docKind = "revision_history";
+          const result = parseRevisionHistory(pages);
+          if (result.length > 0){
+            await applyRevisionHistoryResult(result);
+            parseStatus = "parsed";
+            parseNotes = `${result.length} revisions imported`;
+          } else {
+            parseStatus = "failed";
+            parseNotes = "Could not parse revision rows";
+          }
+        } else {
+          parseStatus = "manual";
+          parseNotes = "Unrecognized document - stored for reference";
         }
-        parseStatus = "manual";
-        parseNotes = docKind === "other"
-          ? "Unrecognized document - stored for reference"
-          : "Reference drawing - stored for viewing, not auto-parsed yet";
       }
     } catch (e){
       parseStatus = "failed";
@@ -877,6 +903,7 @@ async function extractPdfPages(pdfDoc){
     const tokens = content.items.map(item => ({
       text: item.str,
       x: item.transform[4],
+      x1: item.transform[4] + (item.width || 0), // used by the cutting-list column gap detector
       top: viewport.height - item.transform[5]
     })).filter(t => t.text.trim().length > 0);
     // group into rows by rounded 'top'
@@ -1113,6 +1140,399 @@ async function applyMasterBomResult(result){
     return { insertedCount, totalCount: items.length, error: `${remaining.length} node(s) could not be attached to a parent` };
   }
   return { insertedCount, totalCount: items.length, error: null };
+}
+
+// =====================================================================
+// FULL ASSEMBLY CUTTING-LIST -> MASTER BOM AUTO-ORGANIZER
+// Ported from the validated Python prototype (cutting_list_parser.py /
+// build_tree.py). Operates on `pages` from extractPdfPages() -- same
+// {rows:[{text,x,x1,top,rowTop}], rawText} shape already used by the
+// Master BOM and Revision History parsers.
+// =====================================================================
+
+const STOP_RE = /^(EXPLODED|VIEW|CLIENT:|ASSEMBLY|DRAWN:|CHECKED:|APPROVED:|UNLESS|DIMENSIONS|TOLERANCE|GENERAL|ANGLE|SHEET|SCALE:|SCALE|WEIGHT:|DRAWING|REFERENCE)$/i;
+const SUB_ASSY_RE = /\bSUB[\s-]?ASSY\b/i;
+const REV_RE = /[-–]?\s*REV\.?\s*\d+\b/i;
+
+function detectColumnBoundaries(words, left, right, minGap){
+  minGap = minGap || 8;
+  const width = Math.floor(right - left) + 3;
+  const occupied = new Uint8Array(width);
+  words.forEach(w => {
+    const x0 = Math.max(left, w.x);
+    const x1 = Math.min(right, w.x1);
+    const lo = Math.max(0, Math.floor(x0 - left));
+    const hi = Math.min(width, Math.floor(x1 - left) + 1);
+    for (let x = lo; x < hi; x++) occupied[x] = 1;
+  });
+  const boundaries = [];
+  let start = null;
+  for (let i = 0; i < width; i++){
+    if (!occupied[i]){
+      if (start === null) start = i;
+    } else if (start !== null){
+      if (i - start >= minGap) boundaries.push(left + (start + i) / 2);
+      start = null;
+    }
+  }
+  if (start !== null && width - start >= minGap) boundaries.push(left + (start + width) / 2);
+  return boundaries;
+}
+
+// Locate the "CUTTING LIST & BOM" table on a single page, if present.
+function findCuttingListTable(page){
+  const rows = page.rows;
+  let titleIdx = -1;
+  for (let i = 0; i < rows.length; i++){
+    if (rows[i].some(w => w.text.toUpperCase().includes("CUTTING"))){ titleIdx = i; break; }
+  }
+  if (titleIdx === -1) return null;
+
+  // pdf.js fuses multi-word labels into single tokens (e.g. "PART NUMBER" as
+  // one string), unlike word-level PDF extraction -- so header detection
+  // must test substrings, not exact token equality.
+  const HEADER_TOKEN_RE = /\b(ITEM|NO\.?|PART|NUMBER|DESCRIPTION|LENGTH|QTY\.?|NETSUITE|CODE)\b/i;
+  const headerWords = [];
+  let headerBottom = rows[titleIdx].rowTop;
+  const HEADER_WINDOW = 6;
+  for (let i = titleIdx + 1; i < Math.min(rows.length, titleIdx + 1 + HEADER_WINDOW); i++){
+    const matched = rows[i].filter(w => HEADER_TOKEN_RE.test(w.text));
+    if (matched.length){
+      headerWords.push(...matched);
+      headerBottom = Math.max(headerBottom, rows[i].rowTop);
+    }
+  }
+  if (!headerWords.length) return null;
+
+  function labelX(...labels){
+    const xs = headerWords.filter(w => labels.some(l => w.text.toUpperCase().includes(l))).map(w => w.x);
+    return xs.length ? Math.min(...xs) : null;
+  }
+  const headerPositions = {
+    item_no: labelX("ITEM","NO."),
+    part_number: labelX("PART","NUMBER"),
+    description: labelX("DESCRIPTION"),
+    length_mm: labelX("LENGTH"),
+    qty: labelX("QTY."),
+    netsuite_code: labelX("NETSUITE","CODE")
+  };
+  Object.keys(headerPositions).forEach(k => { if (headerPositions[k] === null) delete headerPositions[k]; });
+  const itemNoX = headerPositions.item_no;
+  const xThreshold = itemNoX - 120;
+
+  const dataLines = [];
+  let prevBottom = headerBottom;
+  for (let i = titleIdx + 1; i < rows.length; i++){
+    const row = rows[i];
+    if (row.rowTop <= headerBottom) continue;
+    const fullText = row.map(w => w.text).join(" ").trim();
+    if (STOP_RE.test(fullText)) break;
+    const kept = row.filter(w => w.x >= xThreshold);
+    if (!kept.length) continue;
+    if (row.rowTop - prevBottom > 80) break;
+    dataLines.push({ top: row.rowTop, words: kept });
+    prevBottom = row.rowTop;
+  }
+  if (!dataLines.length) return null;
+
+  const regionLeft = xThreshold;
+  const allWords = dataLines.flatMap(l => l.words);
+  const regionRight = Math.max(...allWords.map(w => w.x1)) + 5;
+  const gapBoundaries = detectColumnBoundaries(allWords, regionLeft, regionRight);
+  const edges = Array.from(new Set([regionLeft, ...gapBoundaries, regionRight])).sort((a,b) => a-b);
+  const segments = [];
+  for (let i = 0; i < edges.length - 1; i++) segments.push([edges[i], edges[i+1]]);
+
+  function segmentIndex(x){
+    for (let i = 0; i < segments.length; i++){
+      if (x >= segments[i][0] - 0.5 && x < segments[i][1] + 0.5) return i;
+    }
+    return segments.length - 1;
+  }
+  const segmentNames = {};
+  Object.entries(headerPositions).forEach(([name, x]) => { segmentNames[segmentIndex(x)] = name; });
+  for (let i = 0; i < segments.length; i++){
+    if (!(i in segmentNames)){
+      const leftNamed = Object.keys(segmentNames).map(Number).filter(j => j < i);
+      const rightNamed = Object.keys(segmentNames).map(Number).filter(j => j > i);
+      if (leftNamed.length) segmentNames[i] = segmentNames[Math.max(...leftNamed)] + "_extra";
+      else if (rightNamed.length) segmentNames[i] = segmentNames[Math.min(...rightNamed)] + "_extra";
+    }
+  }
+
+  return { segments, segmentNames, lines: dataLines };
+}
+
+function buildRowsFromTable(table){
+  const { segments, segmentNames, lines } = table;
+  if (!lines.length) return [];
+
+  function bucketOf(x){
+    let idx = null;
+    for (let i = 0; i < segments.length; i++){
+      if (x >= segments[i][0] - 0.5 && x < segments[i][1] + 0.5){ idx = i; break; }
+    }
+    if (idx === null) idx = segments.length - 1;
+    const name = segmentNames[idx] || "unknown";
+    return name.replace("_extra", "");
+  }
+
+  lines.forEach(ln => {
+    const buckets = {};
+    ln.words.forEach(w => {
+      const b = bucketOf(w.x);
+      (buckets[b] = buckets[b] || []).push(w.text);
+    });
+    ln.buckets = {};
+    Object.entries(buckets).forEach(([k,v]) => { ln.buckets[k] = v.join(" "); });
+  });
+
+  const anchors = lines.filter(ln => ln.buckets.qty);
+  if (!anchors.length) return [];
+  const anchorTops = anchors.map(a => a.top);
+
+  const tops = lines.map(l => l.top).sort((a,b) => a-b);
+  const diffs = [];
+  for (let i = 1; i < tops.length; i++) diffs.push(tops[i]-tops[i-1]);
+  diffs.sort((a,b) => a-b);
+  const medianGap = diffs.length ? diffs[Math.floor(diffs.length/2)] : 19;
+  const LOOKAHEAD = Math.max(10, Math.round(medianGap * 0.65));
+
+  function assignGroup(y){
+    let best = -1;
+    for (let i = 0; i < anchorTops.length; i++){
+      if (anchorTops[i] - LOOKAHEAD <= y) best = i;
+    }
+    return best;
+  }
+
+  const groups = anchors.map(() => []);
+  lines.forEach(ln => {
+    const anchorIdx = anchors.indexOf(ln);
+    const idx = anchorIdx !== -1 ? anchorIdx : assignGroup(ln.top);
+    if (idx === -1) return;
+    groups[idx].push(ln);
+  });
+
+  const rows = [];
+  anchors.forEach((anchor, i) => {
+    const group = groups[i].slice().sort((a,b) => a.top - b.top);
+    const merged = {};
+    group.forEach(ln => {
+      Object.entries(ln.buckets).forEach(([k,v]) => {
+        (merged[k] = merged[k] || []).push(v);
+      });
+    });
+    const row = {};
+    Object.entries(merged).forEach(([k,v]) => { row[k] = v.join(" ").trim(); });
+    const itemNo = row.item_no || "";
+    row.item_no = /^\d+$/.test(itemNo) ? itemNo : null;
+    row.qty = (row.qty || "").replace(/X/g, "").trim() || null;
+    rows.push(row);
+  });
+  return rows;
+}
+
+function classifyNode(row){
+  const desc = (row.description || "").trim().toUpperCase();
+  const netsuite = (row.netsuite_code || "").trim().toUpperCase();
+  const partNumber = (row.part_number || "").trim().toUpperCase();
+
+  if (netsuite.endsWith("-SA")) return { node_type: "sub_assembly", category: null };
+  if (!desc && !netsuite && SUB_ASSY_RE.test(partNumber)) return { node_type: "sub_assembly", category: null };
+
+  if (desc.startsWith("PL.")) return { node_type: "item", category: "sheetmetal" };
+  if (/^(SHS|RHS|CHS|FLAT BAR)\b/.test(desc)) return { node_type: "item", category: "weldment" };
+  if (netsuite.startsWith("F")) return { node_type: "item", category: "fastener" };
+  if (netsuite.startsWith("ST")) return { node_type: "item", category: "label" };
+  if (netsuite.startsWith("MP") || netsuite.startsWith("PL")) return { node_type: "item", category: "fastener" };
+  if (!desc && !netsuite) return { node_type: "item", category: "weldment" };
+  return { node_type: "item", category: "other" };
+}
+
+function normalizeName(text){
+  text = text || "";
+  text = text.replace(REV_RE, "");
+  text = text.replace(SUB_ASSY_RE, "");
+  text = text.toUpperCase().replace(/[^A-Z0-9 ]/g, " ");
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function localNest(rows){
+  const nested = [];
+  let current = null;
+  rows.forEach(r => {
+    if (r.item_no !== null){
+      current = { row: r, children: [] };
+      nested.push(current);
+    } else {
+      if (!current){
+        current = { row: { item_no: null, part_number: "", description: "", qty: null, netsuite_code: "", length_mm: "" }, children: [] };
+        nested.push(current);
+      }
+      current.children.push({ row: r, children: [] });
+    }
+  });
+  return nested;
+}
+
+function findMatchTable(nodeRow, tables, excludePage){
+  const netsuite = (nodeRow.netsuite_code || "").toUpperCase();
+  const codeKey = netsuite.endsWith("-SA") ? netsuite.slice(0, -3) : null;
+  const nameKey = normalizeName(nodeRow.part_number);
+  for (const t of tables){
+    if (t.page === excludePage || !t.rows.length) continue;
+    const firstItem = t.rows.find(r => r.item_no !== null);
+    if (!firstItem) continue;
+    if (codeKey && (firstItem.netsuite_code || "").toUpperCase() === codeKey) return t;
+    if (nameKey && normalizeName(firstItem.part_number) === nameKey) return t;
+  }
+  return null;
+}
+
+// Parse every CUTTING LIST & BOM table across all pages, nest + recursively
+// resolve sub-assemblies, and flatten to the {meta, items} shape
+// applyMasterBomResult() already expects.
+function buildFullAssyTree(pages){
+  const tables = [];
+  pages.forEach((page, i) => {
+    const t = findCuttingListTable(page);
+    if (t){
+      const rows = buildRowsFromTable(t);
+      tables.push({ page: i + 1, rows });
+    }
+  });
+  if (!tables.length) return { meta: {}, items: [] };
+
+  const rootPage = tables[0].page;
+  const byPage = {};
+  tables.forEach(t => { byPage[t.page] = t; });
+  const usedPages = new Set([rootPage]);
+
+  function expand(node){
+    const cls = classifyNode(node.row);
+    node.row._node_type = cls.node_type;
+    node.row._category = cls.category;
+    if (cls.node_type === "sub_assembly" && node.children.length === 0){
+      const match = findMatchTable(node.row, tables, rootPage);
+      if (match && !usedPages.has(match.page)){
+        usedPages.add(match.page);
+        node.children = localNest(match.rows);
+        node.row._resolved_from_page = match.page;
+      }
+    }
+    node.children.forEach(expand);
+  }
+
+  const rootNested = localNest(byPage[rootPage].rows);
+  rootNested.forEach(expand);
+
+  const items = [];
+  let tempCounter = 0;
+  function flatten(nested, parentTempId){
+    nested.forEach((node, i) => {
+      const row = node.row;
+      tempCounter++;
+      const tempId = "tmp" + tempCounter;
+      items.push({
+        tempId,
+        parentTempId: parentTempId,
+        node_type: row._node_type || "item",
+        item_no: row.item_no || null,
+        part_number: row.part_number || null,
+        description: row.description || null,
+        material: null,
+        category: row._category || null,
+        length_mm: row.length_mm ? parseFloat(row.length_mm) : null,
+        qty: row.qty ? parseFloat(row.qty) : 1,
+        netsuite_code: row.netsuite_code || null,
+        remarks: row._resolved_from_page ? ("resolved from page " + row._resolved_from_page) : null,
+        sort_order: i
+      });
+      flatten(node.children, tempId);
+    });
+  }
+  flatten(rootNested, null);
+
+  return { meta: {}, items };
+}
+
+// =====================================================================
+// STANDARD PARTS PARSER
+// =====================================================================
+// pdf.js can fuse "item: <value>" into a single token, unlike word-level
+// PDF extraction where the label and its value are separate tokens -- so
+// detect the label as a PREFIX of the first token, not the whole token.
+const SP_LABEL_PREFIX_RE = /^(item|q'?ty|mat'?l):\s*/i;
+const SP_STOP_LABELS = new Set(["CLIENT:","ASSEMBLY","NUMBER:","DRAWN:","SHEET","SCALE:","WEIGHT:","NAME:","CHECKED:","APPROVED:","UNLESS","DIMENSIONS","TOLERANCE","GENERAL","ANGLE","IN"]);
+
+function parseStandardPartsPage(page, pageNum){
+  const rows = page.rows;
+  const fields = {};
+  let currentLabel = null;
+  rows.forEach(row => {
+    if (!row.length) return;
+    const firstTok = row[0];
+    const m = firstTok.text.match(SP_LABEL_PREFIX_RE);
+    if (m){
+      currentLabel = m[1].toLowerCase().replace(/'/g, "");
+      const restOfFirst = firstTok.text.slice(m[0].length);
+      const restTokens = row.slice(1).map(w => w.text);
+      fields[currentLabel] = [restOfFirst, ...restTokens].join(" ").trim();
+    } else if (currentLabel && firstTok.x < 900 && !SP_STOP_LABELS.has(firstTok.text.toUpperCase())){
+      fields[currentLabel] += " " + row.map(w => w.text).join(" ");
+    } else if (SP_STOP_LABELS.has(firstTok.text.toUpperCase()) || firstTok.x >= 900){
+      currentLabel = null;
+    }
+  });
+
+  let netsuiteCode = null;
+  for (let i = 0; i < rows.length; i++){
+    const matchTok = rows[i].find(w => /ASSEMBLY/i.test(w.text) && /NUMBER/i.test(w.text));
+    const hasAssembly = rows[i].some(w => /ASSEMBLY/i.test(w.text));
+    const hasNumber = rows[i].some(w => /NUMBER/i.test(w.text));
+    if (matchTok || (hasAssembly && hasNumber)){
+      const labelTok = matchTok || rows[i].find(w => /ASSEMBLY/i.test(w.text) || /NUMBER/i.test(w.text));
+      const labelX1 = labelTok.x1;
+      for (let j = i + 1; j < Math.min(rows.length, i + 5); j++){
+        const candidates = rows[j].filter(w => w.x > labelX1 - 50 && w.x < labelX1 + 350 && /^[A-Z]{1,3}\d{3,}(-SA)?$/.test(w.text.trim()));
+        if (candidates.length){ netsuiteCode = candidates[0].text.trim(); break; }
+      }
+      break;
+    }
+  }
+
+  return {
+    page: pageNum,
+    netsuite_code: netsuiteCode,
+    part_number: netsuiteCode,
+    description: fields.item || null,
+    qty_note: fields.qty || null,
+    material: fields.matl || null,
+    category: null,
+    drawing_ref: "HDSB003 STANDARD PARTS p" + pageNum,
+    weight_kg: null
+  };
+}
+
+function parseStandardPartsPages(pages){
+  return pages.map((p, i) => parseStandardPartsPage(p, i + 1));
+}
+
+async function applyStandardPartsResult(records){
+  const rows = records.filter(r => r.netsuite_code).map(r => ({
+    netsuite_code: r.netsuite_code,
+    part_number: r.part_number,
+    description: r.description,
+    material: r.material,
+    category: r.category,
+    drawing_ref: r.drawing_ref,
+    weight_kg: r.weight_kg
+  }));
+  if (rows.length === 0) return { insertedCount: 0, totalCount: records.length, error: null };
+  const { data, error } = await sb.from("standard_parts").upsert(rows, { onConflict: "netsuite_code" }).select();
+  if (error) return { insertedCount: 0, totalCount: records.length, error: error.message };
+  return { insertedCount: data.length, totalCount: records.length, error: null };
 }
 
 // =====================================================================
