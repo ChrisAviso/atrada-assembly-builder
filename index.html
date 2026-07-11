@@ -18,6 +18,8 @@
   /* Status / category accents (muted, technical-legend palette) */
   --green:#1f9d63; --orange:#c17817; --red:#c62f45; --purple:#6d4e9c; --teal:#0f8a83;
   --sheetmetal:#3f7cb0; --weldment:#c17817; --fastener:#6d4e9c; --label:#1f9d63; --other:#6b7280;
+  /* Master BOM print palette */
+  --pb-blue:#1a56db; --pb-blue-light:#d3e2fb; --pb-green:#1f8a4c; --pb-green-mid:#2fa363; --pb-green-light:#cdeed9; --pb-black:#171717;
   --radius:10px;
   --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -102,33 +104,48 @@ td.assembly-name{color:var(--navy);}
   body *{visibility:hidden;}
   #printView, #printView *{visibility:visible;}
   #printView{display:block;position:absolute;top:0;left:0;width:100%;margin:0;padding:0;}
-  @page{margin:14mm;}
+  @page{size:A3 landscape;margin:10mm 12mm;}
 }
-.print-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:18px;}
-.print-brand{font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--navy);}
-.print-brand .dot{color:var(--blue);}
-.print-doctitle{font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--blue);text-transform:uppercase;text-align:right;}
-.print-doctitle .big{display:block;font-family:var(--font-sans);font-size:20px;font-weight:700;color:var(--navy);letter-spacing:-.01em;text-transform:none;margin-top:2px;}
-.print-titleblock{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--navy);margin-bottom:22px;}
-.print-titleblock .ptf{padding:8px 12px;border-left:1px solid var(--grey-border);border-bottom:1px solid var(--grey-border);}
-.print-titleblock .ptf:nth-child(4n+1){border-left:none;}
-.print-titleblock .ptf label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--grey-text);font-weight:600;margin-bottom:3px;}
-.print-titleblock .ptf div{font-family:var(--font-mono);font-size:13px;color:var(--navy);}
-.print-cat-band{background:var(--other);color:#fff;font-family:var(--font-mono);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 10px;margin:16px 0 0;break-after:avoid;}
-.print-cat-band.cat-sheetmetal{background:var(--sheetmetal);}
-.print-cat-band.cat-weldment{background:var(--weldment);}
-.print-cat-band.cat-fastener{background:var(--fastener);}
-.print-cat-band.cat-label{background:var(--label);}
-table.print-bom-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:2px;}
-table.print-bom-table th{text-align:left;background:#eee;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em;padding:5px 8px;border:1px solid #ccc;}
-table.print-bom-table td{padding:4px 8px;border:1px solid #ddd;vertical-align:top;}
-table.print-bom-table tr.print-group-row td{background:#f2f2f2;font-weight:700;}
-.print-footer{margin-top:22px;padding-top:8px;border-top:1px solid var(--grey-border);font-size:9.5px;color:var(--grey-text);display:flex;justify-content:space-between;}
+.print-sheet{font-family:var(--font-sans);font-size:9.5px;color:#161616;}
+.print-band{color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.02em;padding:8px 12px;break-after:avoid;break-inside:avoid;}
+.print-band.pb-title{background:var(--pb-blue);font-size:21px;padding:13px 14px;letter-spacing:0;margin-bottom:0;}
+.print-band.pb-green{background:var(--pb-green);font-size:10.5px;margin-top:12px;}
+.print-band.pb-blue-cat{background:var(--pb-blue);font-size:10.5px;margin-top:12px;}
+.print-subband{padding:4.5px 12px;font-size:9.5px;font-weight:700;text-transform:uppercase;break-after:avoid;break-inside:avoid;}
+.print-subband-green{background:var(--pb-green-light);color:#111;}
+.print-subband-blue{background:var(--pb-blue-light);color:#111;}
+.print-subband-blue.nested{padding-left:30px;font-weight:600;opacity:.9;}
+.print-subband-blue.italic{font-style:italic;text-transform:none;font-weight:600;}
+
+table.print-titleblock-table{width:100%;border-collapse:collapse;margin-bottom:0;font-size:10.5px;}
+table.print-titleblock-table td{border:1px solid #c7cdd6;padding:5px 12px;}
+table.print-titleblock-table td.pb-lbl{font-weight:700;width:11%;}
+table.print-titleblock-table td.pb-val{width:39%;font-family:var(--font-mono);}
+table.print-titleblock-table tr:nth-child(odd) td{background:#fff;}
+table.print-titleblock-table tr:nth-child(even) td{background:#f2f3f5;}
+
+table.print-bom-table{width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:0;}
+table.print-bom-table th{text-align:left;background:var(--pb-blue);color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.02em;padding:5px 8px;border:1px solid #6a90d6;}
+table.print-bom-table td{padding:3.5px 8px;border:1px solid #ddd;vertical-align:top;}
+table.print-bom-table tbody tr:nth-child(even) td{background:#f4f5f7;}
+table.print-bom-table tr.print-profile-row td{background:var(--pb-green-light);font-weight:700;text-transform:uppercase;}
+table.print-bom-table tr.print-subgroup-row td{background:var(--pb-green-light);font-weight:700;text-transform:uppercase;}
+table.print-bom-table tr.print-subtotal-row td{background:var(--pb-green-mid);color:#fff;font-weight:700;}
+table.print-bom-table tr.print-grandtotal-row td{background:var(--pb-blue);color:#fff;font-weight:700;}
+
+table.print-cut-table{width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:0;}
+table.print-cut-table th{text-align:left;background:var(--pb-black);color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.02em;padding:5px 8px;border:1px solid #444;}
+table.print-cut-table td{padding:3.5px 8px;border:1px solid #ddd;}
+table.print-cut-table tbody tr:nth-child(even) td{background:#f4f5f7;}
+
+.print-notes{font-size:9px;color:#333;margin-top:7px;line-height:1.6;}
+.print-footer{margin-top:16px;padding-top:7px;border-top:1px solid #c7cdd6;font-size:9px;color:#555;display:flex;justify-content:space-between;}
 
 /* Title-block meta strip: bordered cells, small-caps labels, mono values */
 .meta-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--grey-border);border-radius:8px;overflow:hidden;margin-bottom:18px;background:var(--grey-bg);}
 .meta-field{padding:9px 14px;border-left:1px solid var(--grey-border);background:var(--white);}
 .meta-field:first-child{border-left:none;}
+.meta-field:nth-child(4n+1){border-left:none;}
 .meta-field label{display:block;font-size:10px;color:var(--grey-text);text-transform:uppercase;font-weight:600;letter-spacing:.06em;margin-bottom:4px;}
 .meta-field select, .meta-field input{width:100%;padding:2px 0;border:none;border-bottom:1px solid transparent;background:none;font-size:13.5px;font-family:var(--font-mono);color:var(--navy);border-radius:0;}
 .meta-field select:hover, .meta-field input:hover{border-bottom-color:var(--grey-border);}
@@ -244,9 +261,11 @@ table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1
     </div>
     <div class="meta-grid">
       <div class="meta-field"><label>Status</label><select id="metaStatus"></select></div>
+      <div class="meta-field"><label>SO #</label><input id="metaSoNumber"></div>
       <div class="meta-field"><label>Client</label><input id="metaClient"></div>
       <div class="meta-field"><label>Current Rev</label><input id="metaRev"></div>
       <div class="meta-field"><label>Tare Wt (kg)</label><input id="metaWeight"></div>
+      <div class="meta-field"><label>Description</label><input id="metaDescription"></div>
     </div>
   </div>
   <div class="tabs">
@@ -481,6 +500,8 @@ function renderDrawerHeader(){
   $("#metaClient").value = a.client || "";
   $("#metaRev").value = a.current_rev || "";
   $("#metaWeight").value = a.tare_wt_kg != null ? a.tare_wt_kg : "";
+  $("#metaSoNumber").value = a.so_number || "";
+  $("#metaDescription").value = a.description || "";
 }
 
 async function saveMetaField(field, value){
@@ -495,6 +516,8 @@ $("#metaStatus").addEventListener("change", e => saveMetaField("status", e.targe
 $("#metaClient").addEventListener("change", e => saveMetaField("client", e.target.value || null));
 $("#metaRev").addEventListener("change", e => saveMetaField("current_rev", e.target.value || null));
 $("#metaWeight").addEventListener("change", e => saveMetaField("tare_wt_kg", e.target.value ? Number(e.target.value) : null));
+$("#metaSoNumber").addEventListener("change", e => saveMetaField("so_number", e.target.value || null));
+$("#metaDescription").addEventListener("change", e => saveMetaField("description", e.target.value || null));
 
 $("#drawerCloseBtn").addEventListener("click", closeDrawer);
 $("#overlay").addEventListener("click", closeDrawer);
@@ -604,92 +627,308 @@ $("#printBomBtn").addEventListener("click", () => {
   setTimeout(() => window.print(), 50);
 });
 
+function findAncestorSubAssembly(node, byId){
+  let cur = node.parent_id ? byId[node.parent_id] : null;
+  while (cur){
+    if (cur.node_type === "sub_assembly") return cur;
+    cur = cur.parent_id ? byId[cur.parent_id] : null;
+  }
+  return null;
+}
+
+function ancestorLabel(node, byId){
+  const anc = findAncestorSubAssembly(node, byId);
+  return anc ? (anc.part_number || "Sub-Assembly") : "Full Assembly";
+}
+
+// Sheetmetal: one row per physical part, Remarks column shows which sub-assembly it belongs to.
+// Fasteners/Labels: dedupe by netsuite code (procurement doesn't care where each piece ends up),
+// summing qty and combining the usage locations into the Remarks column.
+function buildFlatOrderSummary(items, byId, dedupe){
+  if (!dedupe){
+    return items.map(n => ({ ...n, _remarks: ancestorLabel(n, byId) }));
+  }
+  const merged = {};
+  const order = [];
+  items.forEach(n => {
+    const key = (n.netsuite_code || n.part_number || n.id || "").toString().toUpperCase() || n.id;
+    const label = ancestorLabel(n, byId);
+    const qty = n.qty != null ? n.qty : 1;
+    if (!merged[key]){ merged[key] = { ...n, qty: 0, _usage: {} }; order.push(key); }
+    merged[key].qty += qty;
+    merged[key]._usage[label] = (merged[key]._usage[label] || 0) + qty;
+  });
+  return order.map(key => {
+    const m = merged[key];
+    m._remarks = Object.entries(m._usage).map(([label, q]) => `${label} ${fmtNum(q)}`).join(" + ");
+    return m;
+  });
+}
+
+// Groups items (already filtered to one category) by their nearest sub-assembly ancestor,
+// falling back to a virtual "Full Assembly" bucket for root-level items with no such ancestor.
+function buildCategoryBreakdown(items, byId){
+  const groups = {};
+  const order = [];
+  items.forEach(n => {
+    const anc = findAncestorSubAssembly(n, byId);
+    const key = anc ? anc.id : "FULL_ASSEMBLY";
+    const label = anc ? (anc.part_number || "Sub-Assembly") : "Full Assembly";
+    if (!groups[key]){ groups[key] = { label, rows: [] }; order.push(key); }
+    groups[key].rows.push(n);
+  });
+  return order.map(key => groups[key]);
+}
+
+// Groups weldment items by profile+material (e.g. "SHS 40 X 3" / PRE-GALV), sums length*qty,
+// and computes 8m bars-to-order via ceiling division plus the resulting offcut.
+function buildWeldmentOrderSummary(items){
+  const groups = {};
+  const order = [];
+  items.forEach(n => {
+    const profile = (n.description || "").trim() || "Unspecified Profile";
+    const material = (n.material || "").trim() || "—";
+    const key = profile + "||" + material;
+    if (!groups[key]){ groups[key] = { profile, material, rows: [] }; order.push(key); }
+    groups[key].rows.push({
+      usage: n.part_number || "",
+      length_mm: n.length_mm || 0,
+      qty: n.qty != null ? n.qty : 1
+    });
+  });
+  const profileGroups = order.map(key => {
+    const g = groups[key];
+    let totalQty = 0, totalLength = 0;
+    g.rows.forEach(r => { totalQty += r.qty; totalLength += r.qty * r.length_mm; });
+    const barsToOrder = totalLength > 0 ? Math.ceil(totalLength / 8000) : 0;
+    const offcut = barsToOrder * 8000 - totalLength;
+    return { profile: g.profile, material: g.material, rows: g.rows, totalQty, totalLength, barsToOrder, offcut };
+  });
+  const grandTotalBars = profileGroups.reduce((s,g) => s + g.barsToOrder, 0);
+  return { profileGroups, grandTotalBars };
+}
+
+// First-fit-decreasing bin packing: sorts pieces longest-first and drops each into the first
+// bar with enough remaining length, opening a new 8000mm bar only when none fit.
+function packBars(pieceLengths, barLength){
+  const sorted = [...pieceLengths].sort((a,b) => b - a);
+  const bars = [];
+  sorted.forEach(len => {
+    let placed = false;
+    for (const bar of bars){
+      if (len <= bar.remaining + 0.001){ bar.cuts.push(len); bar.remaining -= len; placed = true; break; }
+    }
+    if (!placed) bars.push({ cuts: [len], remaining: barLength - len });
+  });
+  return bars.map(b => ({ cuts: b.cuts, used: barLength - b.remaining, waste: b.remaining }));
+}
+
+function formatCuts(cuts){
+  const counts = {};
+  cuts.forEach(c => { counts[c] = (counts[c]||0) + 1; });
+  return Object.keys(counts).map(Number).sort((a,b) => b - a)
+    .map(len => `${fmtNum(len)}x${counts[len]}`).join(" | ");
+}
+
+function orderTableHead(){
+  return `<thead><tr>
+    <th style="width:4%">#</th><th style="width:20%">Sub-Assembly / Part Name</th><th style="width:22%">Description</th>
+    <th style="width:7%">Mat'l</th><th style="width:9%">Length (mm)</th><th style="width:5%">Qty</th>
+    <th style="width:10%">NetSuite Code</th><th style="width:23%">Remarks</th>
+  </tr></thead>`;
+}
+
+function renderFlatOrderRows(rows, startNum){
+  let html = "";
+  rows.forEach((n, i) => {
+    html += `<tr>
+      <td>${startNum + i}</td>
+      <td>${esc(n.part_number)||""}</td>
+      <td>${esc(n.description)||""}</td>
+      <td>${esc(n.material)||""}</td>
+      <td>${n.length_mm != null ? fmtNum(n.length_mm) : ""}</td>
+      <td>${n.qty != null ? fmtNum(n.qty) : ""}</td>
+      <td>${esc(n.netsuite_code)||""}</td>
+      <td>${esc(n._remarks)||""}</td>
+    </tr>`;
+  });
+  return html;
+}
+
+function renderBreakdownSection(cat, items, byId){
+  if (!items.length) return "";
+  let out = `<div class="print-band pb-blue-cat">${CATEGORY_LABELS[cat]}</div>`;
+  const groups = buildCategoryBreakdown(items, byId);
+  let n = 1;
+  if (cat === "weldment"){
+    // Second nesting level: within each sub-assembly, group by the weldment's own
+    // part_number (e.g. "MAIN FRAME - REV.03"), matching the reference document's layout.
+    groups.forEach(g => {
+      out += `<div class="print-subband print-subband-blue">${esc(g.label)}</div>`;
+      const byPart = {};
+      const partOrder = [];
+      g.rows.forEach(r => {
+        const key = r.part_number || "—";
+        if (!byPart[key]){ byPart[key] = []; partOrder.push(key); }
+        byPart[key].push(r);
+      });
+      partOrder.forEach(key => {
+        out += `<div class="print-subband print-subband-blue nested">${esc(key)}</div>`;
+        out += `<table class="print-bom-table">${orderTableHead()}<tbody>`;
+        byPart[key].forEach(r => {
+          out += renderFlatOrderRows([{ ...r, _remarks: "" }], n);
+          n++;
+        });
+        out += `</tbody></table>`;
+      });
+    });
+  } else {
+    groups.forEach(g => {
+      out += `<div class="print-subband print-subband-blue">${esc(g.label)}</div>`;
+      out += `<table class="print-bom-table">${orderTableHead()}<tbody>`;
+      g.rows.forEach(r => {
+        out += renderFlatOrderRows([{ ...r, _remarks: "" }], n);
+        n++;
+      });
+      out += `</tbody></table>`;
+    });
+  }
+  return out;
+}
+
 function renderPrintView(){
   const a = selectedAssembly;
-  const byParent = {};
-  bomNodes.forEach(n => {
-    const key = n.parent_id || "root";
-    (byParent[key] = byParent[key] || []).push(n);
-  });
-  Object.values(byParent).forEach(list => list.sort((x,y) => (x.sort_order||0) - (y.sort_order||0)));
-  const rootNodes = byParent["root"] || [];
-  const byCategory = {};
-  rootNodes.forEach(n => {
+  const byId = {};
+  bomNodes.forEach(n => { byId[n.id] = n; });
+  const itemsByCategory = {};
+  CATEGORY_ORDER.forEach(cat => { itemsByCategory[cat] = []; });
+  bomNodes.filter(n => n.node_type === "item").forEach(n => {
     const cat = n.category || "other";
-    (byCategory[cat] = byCategory[cat] || []).push(n);
+    (itemsByCategory[cat] = itemsByCategory[cat] || []).push(n);
   });
+  Object.values(itemsByCategory).forEach(list => list.sort((x,y) => (x.sort_order||0) - (y.sort_order||0)));
 
-  let tableHtml = "";
-  CATEGORY_ORDER.forEach(cat => {
-    const nodes = byCategory[cat];
-    if (!nodes || nodes.length === 0) return;
-    tableHtml += `<div class="print-cat-band cat-${cat}">${CATEGORY_LABELS[cat]}</div>`;
-    tableHtml += `<table class="print-bom-table"><thead><tr>
-      <th style="width:5%">#</th><th style="width:23%">Sub-Assembly / Part Name</th><th style="width:21%">Description</th>
-      <th style="width:8%">Mat'l</th><th style="width:9%">Length (mm)</th><th style="width:5%">Qty</th>
-      <th style="width:10%">NetSuite Code</th><th style="width:15%">Remarks</th>
+  let html = "";
+
+  // ---- Sheetmetal order summary (procurement) ----
+  const sheetmetalFlat = buildFlatOrderSummary(itemsByCategory.sheetmetal || [], byId, false);
+  if (sheetmetalFlat.length){
+    html += `<div class="print-band pb-green">Sheetmetal Order Summary (Procurement)</div>`;
+    html += `<table class="print-bom-table">${orderTableHead()}<tbody>${renderFlatOrderRows(sheetmetalFlat, 1)}</tbody></table>`;
+  }
+
+  // ---- Weldments order summary (8m bar calc + cutting plan) ----
+  const weldmentItems = itemsByCategory.weldment || [];
+  const weldSummary = buildWeldmentOrderSummary(weldmentItems);
+  if (weldSummary.profileGroups.length){
+    html += `<div class="print-band pb-green">Weldments - 8m Bar Order Summary (Procurement)</div>`;
+    html += `<table class="print-bom-table"><thead><tr>
+      <th style="width:4%">#</th><th style="width:16%">Profile / Mat'l</th><th style="width:30%">Sub-Assembly / Usage</th>
+      <th style="width:9%">Length (mm)</th><th style="width:6%">Qty</th><th style="width:9%">Total (mm)</th>
+      <th style="width:8%">8m Bars</th><th style="width:18%">Offcut (mm)</th>
     </tr></thead><tbody>`;
-    nodes.forEach(n => { tableHtml += printNodeRow(n, byParent, 0); });
-    tableHtml += `</tbody></table>`;
+    let wn = 1;
+    weldSummary.profileGroups.forEach(g => {
+      html += `<tr class="print-profile-row"><td colspan="8">${esc(g.profile)}</td></tr>`;
+      g.rows.forEach(r => {
+        html += `<tr>
+          <td>${wn++}</td><td>${esc(g.profile)}</td><td>${esc(r.usage)}</td>
+          <td>${fmtNum(r.length_mm)}</td><td>${fmtNum(r.qty)}</td><td>${fmtNum(r.qty * r.length_mm)}</td>
+          <td></td><td></td>
+        </tr>`;
+      });
+      html += `<tr class="print-subtotal-row"><td colspan="3">SUBTOTAL - ${esc(g.profile)}</td>
+        <td></td><td>${fmtNum(g.totalQty)}</td><td>${fmtNum(g.totalLength)}</td>
+        <td>${g.barsToOrder}</td><td>ORDER ${g.barsToOrder} x 8M BAR(S)</td></tr>`;
+    });
+    html += `</tbody></table>`;
+
+    html += `<div class="print-band pb-green">Order Summary - Total 8m Bars to Purchase</div>`;
+    html += `<table class="print-bom-table"><thead><tr>
+      <th style="width:4%">#</th><th style="width:20%">Profile</th><th style="width:12%">Material</th>
+      <th style="width:9%">Total Pcs</th><th style="width:12%">Total Length (mm)</th><th style="width:9%">/ 8,000mm</th>
+      <th style="width:10%">Bars to Order</th><th style="width:12%">Offcut (mm)</th><th style="width:12%">Order Note</th>
+    </tr></thead><tbody>`;
+    weldSummary.profileGroups.forEach((g, i) => {
+      html += `<tr>
+        <td>${i+1}</td><td>${esc(g.profile)}</td><td>${esc(g.material)}</td>
+        <td>${fmtNum(g.totalQty)}</td><td>${fmtNum(g.totalLength)}</td><td>${(g.totalLength/8000).toFixed(2)}</td>
+        <td>${g.barsToOrder}</td><td>${fmtNum(g.offcut)}</td><td>Order ${g.barsToOrder} bar${g.barsToOrder===1?"":"s"}</td>
+      </tr>`;
+    });
+    html += `<tr class="print-grandtotal-row"><td colspan="6">GRAND TOTAL - ALL PROFILES</td><td>${weldSummary.grandTotalBars}</td><td colspan="2">ORDER ${weldSummary.grandTotalBars} BARS TOTAL</td></tr>`;
+    html += `</tbody></table>`;
+    html += `<div class="print-notes">
+      NOTE 1: Bars to Order = CEILING(Total Length / 8,000mm) per profile.<br>
+      NOTE 2: Offcut = (Bars Ordered x 8,000) - Total Length. Retain offcuts for site use.<br>
+      NOTE 3: All bar lengths are in millimetres. Standard bar length = 8,000mm.<br>
+      NOTE 4: No kerf/cutting allowance included - add 3-5mm per cut as required.
+    </div>`;
+
+    // ---- Cutting plan ----
+    html += `<div class="print-band pb-blue-cat">Cutting Plan</div>`;
+    weldSummary.profileGroups.forEach(g => {
+      if (!g.totalLength) return;
+      const pieces = [];
+      g.rows.forEach(r => { for (let i=0;i<r.qty;i++) pieces.push(r.length_mm); });
+      const bars = packBars(pieces, 8000);
+      html += `<div class="print-subband print-subband-blue italic">Cutting Plan - ${esc(g.profile)} (each 8,000mm bar)</div>`;
+      html += `<table class="print-cut-table"><thead><tr>
+        <th style="width:8%">Bar #</th><th style="width:62%">Cuts (length mm x qty)</th>
+        <th style="width:15%">Used (mm)</th><th style="width:15%">Waste (mm)</th>
+      </tr></thead><tbody>`;
+      bars.forEach((b, i) => {
+        html += `<tr><td>Bar ${i+1}</td><td>${formatCuts(b.cuts)}</td><td>${fmtNum(b.used)}</td><td>${fmtNum(b.waste)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    });
+  }
+
+  // ---- Fasteners + Labels combined order summary (procurement) ----
+  const fastenerFlat = buildFlatOrderSummary(itemsByCategory.fastener || [], byId, true);
+  const labelFlat = buildFlatOrderSummary(itemsByCategory.label || [], byId, true);
+  if (fastenerFlat.length || labelFlat.length){
+    html += `<div class="print-band pb-green">Order Summary - Remaining Groups (Fasteners &amp; Fittings + Labels &amp; Stickers)</div>`;
+    html += `<table class="print-bom-table">${orderTableHead()}<tbody>`;
+    if (fastenerFlat.length){
+      html += `<tr class="print-subgroup-row"><td colspan="8">Fasteners &amp; Fittings</td></tr>`;
+      html += renderFlatOrderRows(fastenerFlat, 1);
+    }
+    if (labelFlat.length){
+      html += `<tr class="print-subgroup-row"><td colspan="8">Labels &amp; Stickers</td></tr>`;
+      html += renderFlatOrderRows(labelFlat, 1);
+    }
+    html += `</tbody></table>`;
+  }
+
+  // ---- Breakdown sections (traceability: grouped by sub-assembly, touch of Atrada blue) ----
+  CATEGORY_ORDER.forEach(cat => {
+    if (cat === "other") return;
+    html += renderBreakdownSection(cat, itemsByCategory[cat] || [], byId);
   });
 
-  const printedAt = new Date().toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" });
+  const today = new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"2-digit", year:"numeric" }).replace(/\//g, "/");
+  const generatedAt = new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }).toUpperCase();
+
   $("#printView").innerHTML = `
-    <div class="print-header">
-      <div class="print-brand"><span class="dot">&#9679;</span> Atrada</div>
-      <div class="print-doctitle">Assembly Record<span class="big">${esc(a.assembly_number)} — ${esc(a.assembly_name)}</span></div>
-    </div>
-    <div class="print-titleblock">
-      <div class="ptf"><label>Client</label><div>${esc(a.client)||"—"}</div></div>
-      <div class="ptf"><label>Status</label><div>${esc(statusLabel(a.status))}</div></div>
-      <div class="ptf"><label>Current Rev</label><div>${esc(a.current_rev)||"—"}</div></div>
-      <div class="ptf"><label>WLL</label><div>${a.wll_kg!=null?fmtNum(a.wll_kg)+" kg":"—"}</div></div>
-      <div class="ptf"><label>Tare Wt</label><div>${a.tare_wt_kg!=null?fmtNum(a.tare_wt_kg)+" kg":"—"}</div></div>
-      <div class="ptf"><label>Total Wt</label><div>${a.total_weight_kg!=null?fmtNum(a.total_weight_kg)+" kg":"—"}</div></div>
-      <div class="ptf"><label>Drawn By</label><div>${esc(a.drawn_by)||"—"}</div></div>
-      <div class="ptf"><label>Checked By</label><div>${esc(a.checked_by)||"—"}</div></div>
-      <div class="ptf"><label>Approved By</label><div>${esc(a.approved_by)||"—"}</div></div>
-      <div class="ptf"><label>Scale</label><div>${esc(a.scale)||"—"}</div></div>
-      <div class="ptf"><label>Printed</label><div>${printedAt}</div></div>
-      <div class="ptf"><label>Source</label><div>Atrada Assembly Builder</div></div>
-    </div>
-    ${tableHtml}
-    <div class="print-footer">
-      <span>Master BOM — ${esc(a.assembly_number)}</span>
-      <span>Generated from Atrada Assembly Builder</span>
+    <div class="print-sheet">
+      <div class="print-band pb-title">Bill of Materials</div>
+      <table class="print-titleblock-table">
+        <tr><td class="pb-lbl">SO #:</td><td class="pb-val">${esc(a.so_number)||""}</td><td class="pb-lbl">REV:</td><td class="pb-val">${esc(a.current_rev)||""}</td></tr>
+        <tr><td class="pb-lbl">CODE:</td><td class="pb-val">${esc(a.assembly_number)||""}</td><td class="pb-lbl">DATE:</td><td class="pb-val">${today}</td></tr>
+        <tr><td class="pb-lbl">DESCRIPTION:</td><td class="pb-val">${esc(a.description)||esc(a.assembly_name)||""}</td><td class="pb-lbl">DRAWN:</td><td class="pb-val">${esc(a.drawn_by)||""}</td></tr>
+        <tr><td class="pb-lbl">CLIENT:</td><td class="pb-val">${esc(a.client)||""}</td><td class="pb-lbl">CHECKED:</td><td class="pb-val">${esc(a.checked_by)||""}</td></tr>
+        <tr><td class="pb-lbl">ASSEMBLY NAME:</td><td class="pb-val">${esc(a.assembly_name)||""}</td><td class="pb-lbl">APPROVED:</td><td class="pb-val">${esc(a.approved_by)||""}</td></tr>
+      </table>
+      ${html}
+      <div class="print-footer">
+        <span>ATRADA &nbsp;|&nbsp; ${esc(a.assembly_number)} &nbsp;|&nbsp; ${esc(statusLabel(a.status)).toUpperCase()} &nbsp;|&nbsp; Generated: ${generatedAt}</span>
+        <span>Generated from Atrada Assembly Builder</span>
+      </div>
     </div>
   `;
 }
 
-function printNodeRow(node, byParent, depth){
-  const children = byParent[node.id] || [];
-  const hasChildren = children.length > 0;
-  const indentPx = depth * 16;
-  let row;
-  if (node.node_type === "sub_assembly"){
-    row = `<tr class="print-group-row">
-      <td>${esc(node.item_no)||""}</td>
-      <td><span style="margin-left:${indentPx}px"></span>${esc(node.part_number)}</td>
-      <td colspan="6">${esc(node.description)||""}</td>
-    </tr>`;
-  } else {
-    row = `<tr>
-      <td>${esc(node.item_no)||""}</td>
-      <td><span style="margin-left:${indentPx+12}px"></span>${esc(node.part_number)||""}</td>
-      <td>${esc(node.description)||""}</td>
-      <td>${esc(node.material)||""}</td>
-      <td>${node.length_mm != null ? fmtNum(node.length_mm) : ""}</td>
-      <td>${node.qty != null ? fmtNum(node.qty) : ""}</td>
-      <td>${esc(node.netsuite_code)||""}</td>
-      <td>${esc(node.remarks)||""}</td>
-    </tr>`;
-  }
-  let out = row;
-  if (hasChildren){
-    children.forEach(c => { out += printNodeRow(c, byParent, depth+1); });
-  }
-  return out;
-}
 
 // ---------------- Revisions Tab ----------------
 function renderRevisionsTab(){
@@ -1130,7 +1369,7 @@ async function applyMasterBomResult(result){
       sort_order: n.sort_order
     }));
     const { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
-    if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
+  if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
     data.forEach((row, idx) => { tempToReal[batch[idx].tempId] = row.id; });
     insertedCount += data.length;
   }
@@ -1181,7 +1420,7 @@ function detectColumnBoundaries(words, left, right, minGap){
 
 // Locate the "CUTTING LIST & BOM" table on a single page, if present.
 function findCuttingListTable(page){
-  const rows = page.rows;
+ r  const rows = page.rows;
   let titleIdx = -1;
   for (let i = 0; i < rows.length; i++){
     if (rows[i].some(w => w.text.toUpperCase().includes("CUTTING"))){ titleIdx = i; break; }
@@ -1345,7 +1584,8 @@ function classifyNode(row){
   if (/^(SHS|RHS|CHS|FLAT BAR)\b/.test(desc)) return { node_type: "item", category: "weldment" };
   if (netsuite.startsWith("F")) return { node_type: "item", category: "fastener" };
   if (netsuite.startsWith("ST")) return { node_type: "item", category: "label" };
-  if (netsuite.startsWith("MP") || netsuite.startsWith("PL")) return { node_type: "item", category: "fastener" };
+  if (netsuite.startsWith("PL")) return { node_type: "item", category: "label" };
+  if (netsuite.startsWith("MP")) return { node_type: "item", category: "fastener" };
   if (!desc && !netsuite) return { node_type: "item", category: "weldment" };
   return { node_type: "item", category: "other" };
 }
