@@ -635,9 +635,14 @@ async function processAndUploadFile(file){
         docKind = "master_bom";
         const result = parseMasterBom(pages);
         if (result.items.length > 0){
-          await applyMasterBomResult(result);
-          parseStatus = "parsed";
-          parseNotes = `${result.items.length} line items imported`;
+          const applyResult = await applyMasterBomResult(result);
+          if (applyResult.error){
+            parseStatus = "failed";
+            parseNotes = `Parsed ${applyResult.totalCount} items but save failed: ${applyResult.error}`;
+          } else {
+            parseStatus = "parsed";
+            parseNotes = `${applyResult.insertedCount} line items imported`;
+          }
         } else {
           parseStatus = "failed";
           parseNotes = "No detail section recognized";
@@ -784,7 +789,6 @@ function parseMasterBom(pages){
   const items = []; // flat list: {tempId, parentTempId, node_type, item_no, part_number, description, material, length_mm, qty, netsuite_code, remarks, category, sort_order}
   let mode = "skip";
   let currentCategory = null;
-  let currentCategoryNode = null;
   let currentGroupNode = null;
   let sortCounter = 0;
   let tempIdCounter = 0;
@@ -828,7 +832,7 @@ function parseMasterBom(pages){
         const qty = qtyStr ? parseFloat(qtyStr.replace(/[^0-9.]/g,"")) : 1;
         items.push({
           tempId: newTempId(),
-          parentTempId: currentGroupNode ? currentGroupNode.tempId : (currentCategoryNode ? currentCategoryNode.tempId : null),
+          parentTempId: currentGroupNode ? currentGroupNode.tempId : null, // no group header -> root-level item, grouped visually by 'category'
           node_type: "item",
           item_no, part_number, description,
           material: material || null,
@@ -853,14 +857,11 @@ function parseMasterBom(pages){
       }
 
       if (isBareCategory){
+        // Category is a pure grouping label (rendered as a colored band in the UI),
+        // NOT a tree node - it never gets inserted into bom_nodes. Only sub-assembly
+        // groups and items are real rows, always at root level or under a group.
         mode = "detail";
         currentCategory = CATEGORY_MAP[upper];
-        currentCategoryNode = {
-          tempId: newTempId(), parentTempId: null, node_type: "sub_assembly",
-          item_no: null, part_number: CATEGORY_LABELS[currentCategory], description: null,
-          material: null, length_mm: null, qty: 1, netsuite_code: null, remarks: null,
-          category: currentCategory, sort_order: sortCounter++, isCategoryRoot: true
-        };
         currentGroupNode = null;
         return;
       }
@@ -869,7 +870,7 @@ function parseMasterBom(pages){
       if (mode === "detail"){
         currentGroupNode = {
           tempId: newTempId(),
-          parentTempId: currentCategoryNode ? currentCategoryNode.tempId : null,
+          parentTempId: null, // groups are root-level nodes, grouped visually by 'category'
           node_type: "sub_assembly",
           item_no: null, part_number: lineText, description: null,
           material: null, length_mm: null, qty: 1, netsuite_code: null, remarks: null,
@@ -880,7 +881,7 @@ function parseMasterBom(pages){
     });
   });
 
-  return { meta, items: items.filter(i => !i.isCategoryRoot) };
+  return { meta, items };
 }
 
 async function applyMasterBomResult(result){
@@ -903,6 +904,7 @@ async function applyMasterBomResult(result){
 
   // Insert nodes level by level, resolving tempId -> real id, since parent_id must reference existing rows
   const tempToReal = {};
+  let insertedCount = 0;
   // Build dependency order: nodes whose parentTempId is null first, then resolve iteratively
   const remaining = [...items];
   let guard = 0;
@@ -933,9 +935,16 @@ async function applyMasterBomResult(result){
       sort_order: n.sort_order
     }));
     const { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
-    if (error){ toast("BOM import error: " + error.message, true); return; }
+    if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
     data.forEach((row, idx) => { tempToReal[batch[idx].tempId] = row.id; });
+    insertedCount += data.length;
   }
+  if (remaining.length > 0){
+    // Some nodes never resolved a parent - shouldn't happen, but surface it rather than
+    // silently reporting success for a partially-imported tree.
+    return { insertedCount, totalCount: items.length, error: `${remaining.length} node(s) could not be attached to a parent` };
+  }
+  return { insertedCount, totalCount: items.length, error: null };
 }
 
 // =====================================================================
