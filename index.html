@@ -1369,7 +1369,7 @@ async function applyMasterBomResult(result){
       sort_order: n.sort_order
     }));
     const { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
-  if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
+    if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
     data.forEach((row, idx) => { tempToReal[batch[idx].tempId] = row.id; });
     insertedCount += data.length;
   }
@@ -1420,7 +1420,7 @@ function detectColumnBoundaries(words, left, right, minGap){
 
 // Locate the "CUTTING LIST & BOM" table on a single page, if present.
 function findCuttingListTable(page){
- r  const rows = page.rows;
+  const rows = page.rows;
   let titleIdx = -1;
   for (let i = 0; i < rows.length; i++){
     if (rows[i].some(w => w.text.toUpperCase().includes("CUTTING"))){ titleIdx = i; break; }
