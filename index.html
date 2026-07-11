@@ -1392,7 +1392,12 @@ async function applyMasterBomResult(result){
 // Master BOM and Revision History parsers.
 // =====================================================================
 
-const STOP_RE = /^(EXPLODED|VIEW|CLIENT:|ASSEMBLY|DRAWN:|CHECKED:|APPROVED:|UNLESS|DIMENSIONS|TOLERANCE|GENERAL|ANGLE|SHEET|SCALE:|SCALE|WEIGHT:|DRAWING|REFERENCE)$/i;
+// NOTE: bare "ANGLE" is deliberately NOT a stop trigger -- a wrapped
+// "CUT ANGLE" remark in a weldment's cutting-list table produces a
+// standalone "ANGLE" line (the word wraps onto its own row), and the real
+// footer boilerplate ("ANGLE - 0.50 degrees") never appears as a bare
+// exact-match line anyway, so including it here only broke real tables early.
+const STOP_RE = /^(EXPLODED|VIEW|CLIENT:|ASSEMBLY|DRAWN:|CHECKED:|APPROVED:|UNLESS|DIMENSIONS|TOLERANCE|GENERAL|SHEET|SCALE:|SCALE|WEIGHT:|DRAWING|REFERENCE)$/i;
 const SUB_ASSY_RE = /\bSUB[\s-]?ASSY\b/i;
 const REV_RE = /[-–]?\s*REV\.?\s*\d+\b/i;
 
@@ -1452,9 +1457,20 @@ function findCuttingListTable(page){
   }
   if (!headerWords.length) return null;
 
+  // Use the CENTER of the matched header word(s)' full span (not just the
+  // left edge) -- a two-word label like "NETSUITE CODE" can have its left
+  // edge sit right at a detected column boundary (e.g. left edge lands in
+  // the REMARKS column's segment while the label's actual data column is one
+  // segment over), which silently mis-assigns that field to the wrong
+  // segment. The label's span midpoint reliably falls inside the segment
+  // that actually holds its data, whether pdf.js fuses the words into one
+  // token or not.
   function labelX(...labels){
-    const xs = headerWords.filter(w => labels.some(l => w.text.toUpperCase().includes(l))).map(w => w.x);
-    return xs.length ? Math.min(...xs) : null;
+    const matched = headerWords.filter(w => labels.some(l => w.text.toUpperCase().includes(l)));
+    if (!matched.length) return null;
+    const minX = Math.min(...matched.map(w => w.x));
+    const maxX1 = Math.max(...matched.map(w => w.x1 !== undefined ? w.x1 : w.x));
+    return (minX + maxX1) / 2;
   }
   const headerPositions = {
     item_no: labelX("ITEM","NO."),
@@ -1542,17 +1558,20 @@ function buildRowsFromTable(table){
   if (!anchors.length) return [];
   const anchorTops = anchors.map(a => a.top);
 
-  const tops = lines.map(l => l.top).sort((a,b) => a-b);
-  const diffs = [];
-  for (let i = 1; i < tops.length; i++) diffs.push(tops[i]-tops[i-1]);
-  diffs.sort((a,b) => a-b);
-  const medianGap = diffs.length ? diffs[Math.floor(diffs.length/2)] : 19;
-  const LOOKAHEAD = Math.max(10, Math.round(medianGap * 0.65));
-
+  // A wrapped multi-line REMARKS value (e.g. "CUT" / "ANGLE" on separate
+  // lines) can sit closer to its item's own anchor row than to any other,
+  // but by an amount that varies row to row -- a fixed one-directional
+  // "lookahead" threshold is fragile right at the midpoint between two
+  // anchors (a line landing just outside the threshold silently gets
+  // claimed by the wrong, earlier anchor instead). Picking the anchor with
+  // the smallest absolute distance is strictly more robust and has no such
+  // boundary case.
   function assignGroup(y){
     let best = -1;
+    let bestDist = Infinity;
     for (let i = 0; i < anchorTops.length; i++){
-      if (anchorTops[i] - LOOKAHEAD <= y) best = i;
+      const dist = Math.abs(anchorTops[i] - y);
+      if (dist < bestDist){ bestDist = dist; best = i; }
     }
     return best;
   }
