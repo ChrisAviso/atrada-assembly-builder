@@ -8,21 +8,22 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="icon" href="https://chrisaviso.github.io/atrada-so-schedule-board/Atrada_%20Symbol_%20Blue%20%5BRGB%5D.png">
 <style>
 :root{
-  /* Ink / structure */
-  --navy:#16233c; --grey-text:#5b6572; --grey-border:#dde1e6; --grey-bg:#f2f3f5; --white:#fff;
-  /* Blueprint accent */
-  --blue:#1f5fa8; --blue-light:#e9f0f9;
+  /* Ink / structure (Atrada brand) */
+  --navy:#111214; --grey-text:#63666e; --grey-border:#d8dade; --grey-bg:#f4f4f2; --white:#fff;
+  /* Atrada blue accent */
+  --blue:#0b5cff; --blue-light:#eaf0ff;
   /* Status / category accents (muted, technical-legend palette) */
-  --green:#1f9d63; --orange:#c17817; --red:#c62f45; --purple:#6d4e9c; --teal:#0f8a83;
-  --sheetmetal:#3f7cb0; --weldment:#c17817; --fastener:#6d4e9c; --label:#1f9d63; --other:#6b7280;
+  --green:#1a9c5a; --orange:#c17817; --red:#e0293f; --purple:#6d4e9c; --teal:#0f8a83;
+  --sheetmetal:#3f7cb0; --weldment:#c17817; --fastener:#6d4e9c; --label:#1a9c5a; --other:#6b7280;
   /* Master BOM print palette */
   --pb-blue:#1a56db; --pb-blue-light:#d3e2fb; --pb-green:#1f8a4c; --pb-green-mid:#2fa363; --pb-green-light:#cdeed9; --pb-black:#171717;
   --radius:10px;
-  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box;}
 body{margin:0;font-family:var(--font-sans);background:var(--grey-bg);color:var(--navy);}
@@ -35,18 +36,21 @@ a{color:var(--blue);}
 /* ---------- Login ---------- */
 #loginScreen{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--grey-bg);}
 .login-box{background:#fff;padding:36px 34px;border-radius:14px;box-shadow:0 24px 60px -18px rgba(15,22,36,.25),0 0 0 1px rgba(15,22,36,.04);width:340px;}
-.login-box h1{font-size:19px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em;}
+.login-box .login-logo{display:block;height:34px;margin:0 0 18px;}
+.login-box h1{font-size:19px;margin:0 0 4px;font-weight:800;letter-spacing:-.01em;}
+.login-box .tagline{color:var(--blue);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:0 0 16px;}
 .login-box p{color:var(--grey-text);font-size:13px;margin:0 0 22px;}
 .login-box input{width:100%;padding:10px 0;margin-bottom:14px;border:none;border-bottom:1.5px solid var(--grey-border);border-radius:0;font-size:14px;font-family:var(--font-mono);}
 .login-box input:focus{outline:none;border-bottom-color:var(--blue);}
 .login-box button{width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:600;margin-top:4px;}
-.login-box button:hover{background:#194b87;}
+.login-box button:hover{background:#0847cc;}
 .login-error{color:var(--red);font-size:13px;margin-bottom:10px;}
 
 /* ---------- Top bar ---------- */
 #topbar{display:flex;align-items:center;justify-content:space-between;background:var(--navy);border-bottom:1px solid var(--navy);padding:12px 22px;position:sticky;top:0;z-index:50;}
-#topbar .brand{font-weight:600;font-size:15.5px;display:flex;align-items:center;gap:9px;color:#fff;letter-spacing:-.01em;}
-#topbar .brand .dot{width:9px;height:9px;border-radius:50%;background:#5b9bd9;}
+#topbar .brand{font-weight:700;font-size:15.5px;display:flex;align-items:center;gap:9px;color:#fff;letter-spacing:-.01em;}
+#topbar .brand img{height:20px;display:block;}
+#topbar .brand .dot{width:9px;height:9px;border-radius:50%;background:#0b5cff;}
 #topbar .right{display:flex;align-items:center;gap:14px;font-size:12.5px;color:#aeb8c9;font-family:var(--font-mono);}
 #topbar button.iconbtn{background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:7px 12px;font-size:12.5px;color:#fff;}
 #topbar button.iconbtn:hover{background:rgba(255,255,255,.08);}
@@ -56,7 +60,7 @@ a{color:var(--blue);}
 .board-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .board-header h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;}
 .btn-primary{background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:600;}
-.btn-primary:hover{background:#194b87;}
+.btn-primary:hover{background:#0847cc;}
 .btn-secondary{background:#fff;color:var(--navy);border:1px solid var(--grey-border);padding:9px 16px;border-radius:7px;font-size:13.5px;font-weight:600;}
 .btn-secondary:hover{background:var(--grey-bg);}
 
@@ -236,7 +240,9 @@ tr.flagged-row td:first-child{box-shadow:inset 3px 0 0 var(--orange);}
 
 <div id="loginScreen">
   <div class="login-box">
-    <h1>Atrada Assembly Builder</h1>
+    <img class="login-logo" src="https://chrisaviso.github.io/atrada-so-schedule-board/Atrada_%20Symbol_%20Blue%20%5BRGB%5D.png" alt="Atrada">
+    <h1>Assembly Builder</h1>
+    <p class="tagline">a worksite solutions company</p>
     <p>Sign in to view the assembly board.</p>
     <div id="loginError" class="login-error" style="display:none;"></div>
     <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
@@ -247,7 +253,7 @@ tr.flagged-row td:first-child{box-shadow:inset 3px 0 0 var(--orange);}
 
 <div id="appShell" style="display:none;">
   <div id="topbar">
-    <div class="brand"><span class="dot"></span> Atrada Assembly Builder</div>
+    <div class="brand"><img src="https://chrisaviso.github.io/atrada-so-schedule-board/Atrada_%20Symbol_%20Blue%20%5BRGB%5D.png" alt="Atrada"> Assembly Builder</div>
     <div class="right">
       <span id="userEmail"></span>
       <button class="iconbtn" id="signOutBtn">Sign out</button>
