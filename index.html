@@ -2209,6 +2209,21 @@ function buildFullAssyTree(pages){
 const SP_LABEL_PREFIX_RE = /^(item|q'?ty|mat'?l):\s*/i;
 const SP_STOP_LABELS = new Set(["CLIENT:","ASSEMBLY","NUMBER:","DRAWN:","SHEET","SCALE:","WEIGHT:","NAME:","CHECKED:","APPROVED:","UNLESS","DIMENSIONS","TOLERANCE","GENERAL","ANGLE","IN"]);
 
+// pdf.js can fuse several boilerplate words from the title block into a
+// SINGLE token (e.g. "UNLESS OTHERWISE SPECIFIED" or "DIMENSIONS WERE
+// EXPRESSED" as one string, sharing a row with "CLIENT:"/"ASSEMBLY NUMBER:"/
+// "DRAWN:" further right) -- so checking the row's first token for an EXACT
+// match against SP_STOP_LABELS misses it (the fused token never equals any
+// single stop word) and the mat'l/item continuation logic keeps appending
+// the entire boilerplate row. Scan every token in the row with a PREFIX
+// check instead of matching only the first token exactly.
+function isStandardPartsStopRow(row){
+  return row.some(w => {
+    const t = w.text.toUpperCase();
+    return w.x >= 900 || [...SP_STOP_LABELS].some(lbl => t.startsWith(lbl));
+  });
+}
+
 function parseStandardPartsPage(page, pageNum){
   const rows = page.rows;
   const fields = {};
@@ -2222,10 +2237,10 @@ function parseStandardPartsPage(page, pageNum){
       const restOfFirst = firstTok.text.slice(m[0].length);
       const restTokens = row.slice(1).map(w => w.text);
       fields[currentLabel] = [restOfFirst, ...restTokens].join(" ").trim();
-    } else if (currentLabel && firstTok.x < 900 && !SP_STOP_LABELS.has(firstTok.text.toUpperCase())){
-      fields[currentLabel] += " " + row.map(w => w.text).join(" ");
-    } else if (SP_STOP_LABELS.has(firstTok.text.toUpperCase()) || firstTok.x >= 900){
+    } else if (isStandardPartsStopRow(row)){
       currentLabel = null;
+    } else if (currentLabel && firstTok.x < 900){
+      fields[currentLabel] += " " + row.map(w => w.text).join(" ");
     }
   });
 
