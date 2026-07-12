@@ -2055,6 +2055,27 @@ function buildFullAssyTree(pages){
   const usedPages = new Set([rootPage]);
 
   function expand(node){
+    // Fold a lone unnumbered continuation row back into its numbered parent.
+    // On some cutting-list tables a row's material/dimension spec (e.g.
+    // "PL. 3 X 1002 X 2986.4") is printed ~26pt below the item_no/part_number/
+    // qty line instead of sharing it, so buildRowsFromTable emits it as its
+    // own row with no item_no -- and localNest() then nests it as a "child"
+    // simply because it has no number of its own. That leaves the real parent
+    // row with a blank description, which classifyNodeType()'s "no
+    // description / no NetSuite code" fallback misreads as a sub-assembly
+    // header. A genuine sub-assembly is never followed by exactly one
+    // description-only, unnumbered, childless row like this, so it's safe to
+    // detect the pattern here and merge the spec straight into the parent
+    // instead of leaving an orphaned single-line "sub-assembly".
+    if (!node.row.description && node.children.length === 1){
+      const only = node.children[0];
+      if (!only.row.item_no && only.children.length === 0 && only.row.description &&
+          !only.row.part_number && !only.row.netsuite_code){
+        node.row.description = only.row.description;
+        if (only.row.length_mm) node.row.length_mm = only.row.length_mm;
+        node.children = [];
+      }
+    }
     const nodeType = classifyNodeType(node.row);
     node.row._node_type = nodeType;
     const flags = [];
