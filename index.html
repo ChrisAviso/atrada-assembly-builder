@@ -1066,8 +1066,22 @@ async function processAndUploadFile(file){
         // for full_assy/standard_parts must run FIRST; revision_history is checked only as a
         // fallback, for documents that are genuinely dedicated revision-history sheets.
         const nameNorm = file.name.toUpperCase().replace(/[_\-]+/g, " ");
-        const looksFullAssy = /FULL\s*ASS(Y|EMBLY)/.test(nameNorm) || /ASSEMBLY DRAWING REFERENCE/i.test(fullText);
-        const looksStandardParts = /STANDARD\s*PARTS?/.test(nameNorm) || /PART DRAWING REFERENCE/i.test(fullText);
+        const filenameSaysFullAssy = /FULL\s*ASS(Y|EMBLY)/.test(nameNorm);
+        const filenameSaysStandardParts = /STANDARD\s*PARTS?/.test(nameNorm);
+        // A "Standard Parts" library document (a catalog of reusable hardware
+        // kits) is built from the SAME page template as a real sub-assembly
+        // reference sheet -- each entry gets its own mini "cutting list" and
+        // footer literally reading "ASSEMBLY DRAWING REFERENCE". That content
+        // signal alone can't tell the two apart, so an explicit filename
+        // signal always wins over it; content sniffing only runs as a
+        // fallback when the filename is ambiguous either way. Getting this
+        // wrong is destructive, not just cosmetic: importing a Standard
+        // Parts doc as a Full Assembly replaces the ENTIRE previously
+        // imported BOM tree with just that document's own tiny cutting list.
+        const looksFullAssy = filenameSaysFullAssy ||
+          (!filenameSaysStandardParts && /ASSEMBLY DRAWING REFERENCE/i.test(fullText));
+        const looksStandardParts = filenameSaysStandardParts ||
+          (!filenameSaysFullAssy && /PART DRAWING REFERENCE/i.test(fullText));
 
         if (looksFullAssy){
           docKind = "full_assy";
