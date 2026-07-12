@@ -1276,7 +1276,10 @@ async function processAndUploadFile(file){
             parseNotes = `Parsed ${applyResult.totalCount} parts but save failed: ${applyResult.error}`;
           } else if (applyResult.insertedCount > 0){
             parseStatus = "parsed";
-            parseNotes = `${applyResult.insertedCount} standard part(s) imported`;
+            parseNotes = `${applyResult.insertedCount} standard part(s) imported`
+              + (applyResult.duplicateCodes && applyResult.duplicateCodes.length
+                ? ` — ${applyResult.duplicateCodes.length} NetSuite code(s) shared by multiple pages, collapsed to one row each, verify: ${applyResult.duplicateCodes.join(", ")}`
+                : "");
           } else {
             parseStatus = "manual";
             parseNotes = "No NetSuite codes recognized - stored for reference";
@@ -2223,10 +2226,32 @@ async function applyStandardPartsResult(records){
     drawing_ref: r.drawing_ref,
     weight_kg: r.weight_kg
   }));
-  if (rows.length === 0) return { insertedCount: 0, totalCount: records.length, error: null };
-  const { data, error } = await sb.from("standard_parts").upsert(rows, { onConflict: "netsuite_code" }).select();
-  if (error) return { insertedCount: 0, totalCount: records.length, error: error.message };
-  return { insertedCount: data.length, totalCount: records.length, error: null };
+  if (rows.length === 0) return { insertedCount: 0, totalCount: records.length, error: null, duplicateCodes: [] };
+
+  // A single "upsert" statement can't apply ON CONFLICT DO UPDATE to the same
+  // target row twice -- if two or more pages in this document share the same
+  // NetSuite code (e.g. a sub-assembly's own overview page and its body/plate
+  // child pages all reading the same "ASSEMBLY NUMBER" title-block field,
+  // rather than each part's own distinct code), Postgres rejects the ENTIRE
+  // batch, not just the duplicates -- a real case: 3 of 9 rows in one upload
+  // all read "CP18879" (a sub-assembly wrapper + its own body + its own
+  // plate). De-dupe by code before upserting (last occurrence wins -- later
+  // pages are usually the more specific child part) so the rest of the batch
+  // still saves, and surface which codes were collapsed so a human can verify
+  // whether they're genuinely meant to share one code or the parser picked up
+  // the wrong title-block field for some of them.
+  const byCode = {};
+  const order = [];
+  rows.forEach(r => {
+    if (!(r.netsuite_code in byCode)) order.push(r.netsuite_code);
+    byCode[r.netsuite_code] = r;
+  });
+  const duplicateCodes = order.filter(code => rows.filter(r => r.netsuite_code === code).length > 1);
+  const dedupedRows = order.map(code => byCode[code]);
+
+  const { data, error } = await sb.from("standard_parts").upsert(dedupedRows, { onConflict: "netsuite_code" }).select();
+  if (error) return { insertedCount: 0, totalCount: records.length, error: error.message, duplicateCodes };
+  return { insertedCount: data.length, totalCount: records.length, error: null, duplicateCodes };
 }
 
 // =====================================================================
