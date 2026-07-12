@@ -785,7 +785,23 @@ function ancestorLabel(node, byId){
 // summing qty and combining the usage locations into the Remarks column.
 function buildFlatOrderSummary(items, byId, dedupe){
   if (!dedupe){
-    return items.map(n => ({ ...n, _remarks: ancestorLabel(n, byId) }));
+    // Sheetmetal (and similar) cutting-list rows often carry no name OR material
+    // of their own in the source PDF -- just raw dimensions in Description --
+    // while the real identifying name (and its material) sit one level up on the
+    // row's immediate parent group (e.g. "UPPER PLATE - REV.0"). Fall back to
+    // that parent's name/material for the printed columns instead of leaving
+    // them blank. Remarks intentionally shows the same parent name: it answers
+    // "which sub-assembly is this part a reference/part of".
+    return items.map(n => {
+      const anc = findAncestorSubAssembly(n, byId);
+      const label = anc ? (anc.part_number || "Sub-Assembly") : "Full Assembly";
+      return {
+        ...n,
+        part_number: n.part_number || label,
+        material: n.material || (anc ? anc.material : null) || null,
+        _remarks: label
+      };
+    });
   }
   const merged = {};
   const order = [];
@@ -814,7 +830,14 @@ function buildCategoryBreakdown(items, byId){
     const key = anc ? anc.id : "FULL_ASSEMBLY";
     const label = anc ? (anc.part_number || "Sub-Assembly") : "Full Assembly";
     if (!groups[key]){ groups[key] = { label, rows: [] }; order.push(key); }
-    groups[key].rows.push(n);
+    // Same fallback as buildFlatOrderSummary: a raw dimension-only leaf row
+    // (blank name/material of its own) inherits its immediate parent group's
+    // name/material rather than printing blank in the breakdown table.
+    groups[key].rows.push({
+      ...n,
+      part_number: n.part_number || label,
+      material: n.material || (anc ? anc.material : null) || null
+    });
   });
   return order.map(key => groups[key]);
 }
@@ -1924,13 +1947,25 @@ function extractPartTitleBlocks(pages){
   pages.forEach(page => {
     page.rows.forEach(row => {
       if (!row.length) return;
-      if (!/^item:$/i.test(row[0].text)) return;
+      // pdf.js can fuse "item: <value>" into a single token instead of leaving
+      // the label as its own token (already confirmed and handled this way in
+      // parseStandardPartsPage) -- an exact "row[0].text === 'item:'" test
+      // misses every page where that fusion happens, silently dropping that
+      // page's title block entirely. A REAL sub-assembly was found to fail
+      // resolution this way: "DISPENSING BOX SUB ASSY"'s own title block (on
+      // its exploded-view page) never got picked up because of this, so the
+      // name-page fallback in expand() below never fired, and its cutting-list
+      // page (whose first row names its first CHILD PART, "DISPENSER BODY",
+      // not itself) was never matched to it -- the whole sub-assembly stayed
+      // childless. Matching on the PREFIX instead of full equality fixes both
+      // the fused and non-fused token cases.
+      if (!/^item:\s*/i.test(row[0].text)) return;
       const labelX = row[0].x;
       const name = consumeContiguous(row, 0).map(w => w.text).join(" ").replace(/^item:\s*/i, "").trim();
       if (!name) return;
-      const qtyRow = page.rows.find(r => r.length && /^q'?ty:$/i.test(r[0].text) &&
+      const qtyRow = page.rows.find(r => r.length && /^q'?ty:\s*/i.test(r[0].text) &&
         Math.abs(r[0].x - labelX) < 15 && r.rowTop > row.rowTop && r.rowTop - row.rowTop < 60);
-      const matlRow = page.rows.find(r => r.length && /^mat'?l:$/i.test(r[0].text) &&
+      const matlRow = page.rows.find(r => r.length && /^mat'?l:\s*/i.test(r[0].text) &&
         Math.abs(r[0].x - labelX) < 15 && r.rowTop > row.rowTop && r.rowTop - row.rowTop < 100);
       const qty = qtyRow ? consumeContiguous(qtyRow, 0).map(w => w.text).join(" ").replace(/^q'?ty:\s*/i, "").trim() : null;
       const material = matlRow ? consumeContiguous(matlRow, 0).map(w => w.text).join(" ").replace(/^mat'?l:\s*/i, "").trim() : null;
