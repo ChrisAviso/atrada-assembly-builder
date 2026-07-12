@@ -194,6 +194,24 @@ table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1
 
 .small-btn{background:none;border:1px solid var(--grey-border);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--navy);font-weight:500;}
 .small-btn:hover{background:var(--grey-bg);}
+.small-btn.danger{color:var(--red);border-color:#f0c4cc;}
+.small-btn.danger:hover{background:#fdecef;}
+
+/* ---------- Delete controls ---------- */
+.row-del-btn{background:none;border:1px solid var(--grey-border);border-radius:5px;width:22px;height:22px;line-height:1;color:var(--grey-text);font-size:14px;padding:0;}
+.row-del-btn:hover{background:#fdecef;border-color:#f0c4cc;color:var(--red);}
+td.row-actions{text-align:center;white-space:nowrap;}
+.board-del-btn{background:none;border:1px solid var(--grey-border);border-radius:5px;width:24px;height:24px;line-height:1;color:var(--grey-text);font-size:14px;padding:0;}
+.board-del-btn:hover{background:#fdecef;border-color:#f0c4cc;color:var(--red);}
+td.board-actions{text-align:center;width:1%;white-space:nowrap;}
+.att-del-btn{background:none;border:1px solid var(--grey-border);border-radius:5px;padding:4px 9px;font-size:11.5px;color:var(--grey-text);}
+.att-del-btn:hover{background:#fdecef;border-color:#f0c4cc;color:var(--red);}
+
+/* ---------- Review / uncertainty flags ---------- */
+.flag-badge{display:inline-block;margin-left:6px;color:var(--orange);cursor:help;font-size:12px;}
+tr.flagged-row td:first-child{box-shadow:inset 3px 0 0 var(--orange);}
+.review-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fdf3e3;border:1px solid #f0d9a8;color:#8a6d00;padding:9px 14px;border-radius:8px;font-size:12.5px;font-weight:600;margin-bottom:14px;}
+.review-banner .small-btn{background:#fff;}
 .linklike{background:none;border:none;color:var(--blue);font-size:13px;padding:0;}
 .section-title{font-size:13.5px;font-weight:600;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:.04em;color:var(--grey-text);}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 8px 24px rgba(15,22,36,.25);}
@@ -256,6 +274,7 @@ table.rev-table td, table.att-table td{padding:8px;border-bottom:1px solid #f0f1
       </div>
       <div class="drawer-header-actions">
         <button class="small-btn" id="printBomBtn">&#128424; Print Master BOM</button>
+        <button class="small-btn danger" id="deleteAssemblyBtn">Delete Assembly</button>
         <button class="drawer-close" id="drawerCloseBtn">&times;</button>
       </div>
     </div>
@@ -425,17 +444,92 @@ function renderBoard(){
       <td>${esc(a.current_rev) || "&mdash;"}</td>
       <td>${a.tare_wt_kg != null ? fmtNum(a.tare_wt_kg) + " kg" : "&mdash;"}</td>
       <td>${esc(a.drawn_by) || "&mdash;"}</td>
+      <td class="board-actions"><button class="board-del-btn" data-id="${a.id}" data-num="${esc(a.assembly_number)}" title="Delete assembly">&times;</button></td>
     </tr>`).join("");
   wrap.innerHTML = `
     <table class="board-table">
       <thead><tr>
-        <th>Assembly #</th><th>Assembly Name</th><th>Client</th><th>Status</th><th>Rev</th><th>Tare Wt</th><th>Drawn By</th>
+        <th>Assembly #</th><th>Assembly Name</th><th>Client</th><th>Status</th><th>Rev</th><th>Tare Wt</th><th>Drawn By</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
   $all("#boardTableWrap tbody tr").forEach(tr => {
     tr.addEventListener("click", () => openDrawer(tr.dataset.id));
   });
+  $all(".board-del-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await confirmAndDeleteAssembly(btn.dataset.id, btn.dataset.num);
+    });
+  });
+}
+
+// =====================================================================
+// DELETE: assembly (cascade), attachment, bom node
+// =====================================================================
+async function deleteAssemblyCascade(id){
+  const { data: atRows } = await sb.from("attachments").select("storage_path").eq("assembly_id", id);
+  const paths = (atRows || []).map(r => r.storage_path).filter(Boolean);
+  if (paths.length){
+    const { error: storErr } = await sb.storage.from("assembly-drawings").remove(paths);
+    if (storErr) console.warn("Storage cleanup warning:", storErr.message);
+  }
+  await sb.from("bom_nodes").delete().eq("assembly_id", id);
+  await sb.from("revisions").delete().eq("assembly_id", id);
+  await sb.from("attachments").delete().eq("assembly_id", id);
+  const { error } = await sb.from("assemblies").delete().eq("id", id);
+  return error;
+}
+
+async function confirmAndDeleteAssembly(id, assemblyNumber){
+  const ok = confirm(`Delete assembly ${assemblyNumber || ""}?\n\nThis permanently removes its BOM tree, revisions, and all attachments (including uploaded files). This cannot be undone.`);
+  if (!ok) return;
+  const error = await deleteAssemblyCascade(id);
+  if (error){ toast("Failed to delete assembly: " + error.message, true); return; }
+  if (selectedAssembly && selectedAssembly.id === id) closeDrawer();
+  await loadAssemblies();
+  toast(`${assemblyNumber || "Assembly"} deleted.`);
+}
+
+$("#deleteAssemblyBtn").addEventListener("click", async () => {
+  if (!selectedAssembly) return;
+  await confirmAndDeleteAssembly(selectedAssembly.id, selectedAssembly.assembly_number);
+});
+
+async function deleteAttachment(attId, storagePath, fileName){
+  const ok = confirm(`Delete attachment "${fileName || ""}"?\n\nThis removes the stored file and its record. It does not undo any BOM/revision data already imported from it.`);
+  if (!ok) return;
+  if (storagePath){
+    const { error: storErr } = await sb.storage.from("assembly-drawings").remove([storagePath]);
+    if (storErr) console.warn("Storage cleanup warning:", storErr.message);
+  }
+  const { error } = await sb.from("attachments").delete().eq("id", attId);
+  if (error){ toast("Failed to delete attachment: " + error.message, true); return; }
+  await loadDrawerData();
+  renderAttachmentsTab();
+  toast("Attachment deleted.");
+}
+
+function collectDescendantIds(nodeId){
+  const ids = [nodeId];
+  bomNodes.filter(n => n.parent_id === nodeId).forEach(c => { ids.push(...collectDescendantIds(c.id)); });
+  return ids;
+}
+
+async function deleteBomNode(nodeId){
+  const node = bomNodes.find(n => n.id === nodeId);
+  if (!node) return;
+  const ids = collectDescendantIds(nodeId);
+  const label = node.part_number || node.description || "this item";
+  const msg = ids.length > 1
+    ? `Delete "${label}" and its ${ids.length - 1} nested item(s)?`
+    : `Delete "${label}"?`;
+  if (!confirm(msg)) return;
+  const { error } = await sb.from("bom_nodes").delete().in("id", ids);
+  if (error){ toast("Failed to delete: " + error.message, true); return; }
+  await loadDrawerData();
+  renderBomTab();
+  toast("Deleted.");
 }
 
 function statusLabel(s){
@@ -543,6 +637,25 @@ function renderDrawerBody(){
 
 // ---------------- BOM Tab ----------------
 let collapsedNodes = new Set();
+let showFlaggedOnly = false;
+
+// Nodes to KEEP visible in "flagged only" mode: every flagged node plus all of
+// its ancestors (so the tree path down to it still makes sense), but not its
+// unflagged siblings/descendants.
+function computeFlagKeepSet(){
+  const byId = {};
+  bomNodes.forEach(n => { byId[n.id] = n; });
+  const keep = new Set();
+  bomNodes.forEach(n => {
+    if (!n.flag_reason) return;
+    let cur = n;
+    while (cur){
+      keep.add(cur.id);
+      cur = cur.parent_id ? byId[cur.parent_id] : null;
+    }
+  });
+  return keep;
+}
 
 function renderBomTab(){
   const body = $("#drawerBody");
@@ -557,7 +670,11 @@ function renderBomTab(){
   });
   Object.values(byParent).forEach(list => list.sort((a,b) => (a.sort_order||0) - (b.sort_order||0)));
 
-  const rootNodes = byParent["root"] || [];
+  const flaggedCount = bomNodes.filter(n => n.flag_reason).length;
+  const keepSet = flaggedCount ? computeFlagKeepSet() : null;
+
+  let rootNodes = byParent["root"] || [];
+  if (showFlaggedOnly && keepSet) rootNodes = rootNodes.filter(n => keepSet.has(n.id));
   const byCategory = {};
   rootNodes.forEach(n => {
     const cat = n.category || "other";
@@ -565,16 +682,22 @@ function renderBomTab(){
   });
 
   let html = "";
+  if (flaggedCount){
+    html += `<div class="review-banner">
+      <span>&#9888; ${flaggedCount} item(s) flagged for review — hover the &#9888; icon on a row for the reason.</span>
+      <button class="small-btn" id="toggleFlaggedOnly">${showFlaggedOnly ? "Show all items" : "Show flagged only"}</button>
+    </div>`;
+  }
   CATEGORY_ORDER.forEach(cat => {
     const nodes = byCategory[cat];
     if (!nodes || nodes.length === 0) return;
     html += `<div class="category-band cat-${cat}">${CATEGORY_LABELS[cat]}</div>`;
     html += `<table class="bom-table"><thead><tr>
-      <th style="width:5%">#</th><th style="width:22%">Sub-Assembly / Part Name</th><th style="width:20%">Description</th>
-      <th style="width:8%">Mat'l</th><th style="width:9%">Length (mm)</th><th style="width:5%">Qty</th>
-      <th style="width:10%">NetSuite Code</th><th style="width:15%">Remarks</th>
+      <th style="width:5%">#</th><th style="width:21%">Sub-Assembly / Part Name</th><th style="width:19%">Description</th>
+      <th style="width:7%">Mat'l</th><th style="width:8%">Length (mm)</th><th style="width:5%">Qty</th>
+      <th style="width:9%">NetSuite Code</th><th style="width:12%">Remarks</th><th style="width:4%"></th>
     </tr></thead><tbody>`;
-    nodes.forEach(n => { html += renderNodeRow(n, byParent, 0); });
+    nodes.forEach(n => { html += renderNodeRow(n, byParent, 0, keepSet); });
     html += `</tbody></table>`;
   });
   body.innerHTML = html;
@@ -587,35 +710,51 @@ function renderBomTab(){
       renderBomTab();
     });
   });
+  $all(".row-del-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await deleteBomNode(btn.dataset.id);
+    });
+  });
+  $("#toggleFlaggedOnly")?.addEventListener("click", () => {
+    showFlaggedOnly = !showFlaggedOnly;
+    renderBomTab();
+  });
 }
 
-function renderNodeRow(node, byParent, depth){
-  const children = byParent[node.id] || [];
+function renderNodeRow(node, byParent, depth, keepSet){
+  let children = byParent[node.id] || [];
+  if (showFlaggedOnly && keepSet) children = children.filter(c => keepSet.has(c.id));
   const hasChildren = children.length > 0;
   const collapsed = collapsedNodes.has(node.id);
   const indentPx = depth * 20;
+  const flagBadge = node.flag_reason ? `<span class="flag-badge" title="${esc(node.flag_reason)}">&#9888;</span>` : "";
+  const flagClass = node.flag_reason ? " flagged-row" : "";
+  const delBtn = `<button class="row-del-btn" data-id="${node.id}" title="Delete this row">&times;</button>`;
   let row;
   if (node.node_type === "sub_assembly"){
-    row = `<tr class="group-row" data-id="${node.id}">
+    row = `<tr class="group-row${flagClass}" data-id="${node.id}">
       <td class="mono">${esc(node.item_no)||""}</td>
-      <td><span class="indent" style="margin-left:${indentPx}px"></span>${hasChildren ? `<span class="toggle" data-id="${node.id}">${collapsed?"&#9656;":"&#9662;"}</span>` : `<span class="toggle"></span>`}${esc(node.part_number)}</td>
+      <td><span class="indent" style="margin-left:${indentPx}px"></span>${hasChildren ? `<span class="toggle" data-id="${node.id}">${collapsed?"&#9656;":"&#9662;"}</span>` : `<span class="toggle"></span>`}${esc(node.part_number)}${flagBadge}</td>
       <td colspan="6">${esc(node.description)||""}</td>
+      <td class="row-actions">${delBtn}</td>
     </tr>`;
   } else {
-    row = `<tr class="item-row" data-id="${node.id}">
+    row = `<tr class="item-row${flagClass}" data-id="${node.id}">
       <td class="mono">${esc(node.item_no)||""}</td>
-      <td><span class="indent" style="margin-left:${indentPx+14}px"></span>${esc(node.part_number)||""}</td>
+      <td><span class="indent" style="margin-left:${indentPx+14}px"></span>${esc(node.part_number)||""}${flagBadge}</td>
       <td>${esc(node.description)||""}</td>
       <td>${esc(node.material)||""}</td>
       <td class="mono">${node.length_mm != null ? fmtNum(node.length_mm) : ""}</td>
       <td class="mono">${node.qty != null ? fmtNum(node.qty) : ""}</td>
       <td class="mono">${esc(node.netsuite_code)||""}</td>
       <td>${esc(node.remarks)||""}</td>
+      <td class="row-actions">${delBtn}</td>
     </tr>`;
   }
   let out = row;
   if (hasChildren && !collapsed){
-    children.forEach(c => { out += renderNodeRow(c, byParent, depth+1); });
+    children.forEach(c => { out += renderNodeRow(c, byParent, depth+1, keepSet); });
   }
   return out;
 }
@@ -983,6 +1122,7 @@ function renderAttachmentsTab(){
       <td>${esc(docKindLabel(a.doc_kind))}</td>
       <td><span class="parse-badge parse-${esc(a.parse_status)}">${esc(a.parse_status)}</span></td>
       <td>${esc(a.parse_notes)||""}</td>
+      <td class="row-actions"><button class="att-del-btn" data-id="${a.id}" data-path="${esc(a.storage_path)}" data-name="${esc(a.file_name)}">Delete</button></td>
     </tr>`).join("");
   body.innerHTML = `
     <div class="section-title">Attachments</div>
@@ -992,7 +1132,7 @@ function renderAttachmentsTab(){
     </div>
     <div id="uploadProgress"></div>
     ${attachments.length === 0 ? `<div class="empty-bom">No files uploaded yet.</div>` : `
-    <table class="att-table"><thead><tr><th>File</th><th>Type</th><th>Doc Kind</th><th>Parse Status</th><th>Notes</th></tr></thead>
+    <table class="att-table"><thead><tr><th>File</th><th>Type</th><th>Doc Kind</th><th>Parse Status</th><th>Notes</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table>`}
   `;
   const zone = $("#uploadZone");
@@ -1003,6 +1143,9 @@ function renderAttachmentsTab(){
   zone.addEventListener("drop", e => {
     e.preventDefault(); zone.classList.remove("dragover");
     handleFiles(e.dataTransfer.files);
+  });
+  $all(".att-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => deleteAttachment(btn.dataset.id, btn.dataset.path, btn.dataset.name));
   });
 }
 
@@ -1093,7 +1236,9 @@ async function processAndUploadFile(file){
               parseNotes = `Parsed ${applyResult.totalCount} items but save failed: ${applyResult.error}`;
             } else {
               parseStatus = "parsed";
-              parseNotes = `${applyResult.insertedCount} line items auto-organized from cutting list`;
+              const flaggedCount = result.items.filter(it => it.flag_reason).length;
+              parseNotes = `${applyResult.insertedCount} line items auto-organized from cutting list`
+                + (flaggedCount ? ` — ${flaggedCount} flagged for review` : "");
             }
           } else {
             parseStatus = "manual";
@@ -1383,9 +1528,18 @@ async function applyMasterBomResult(result){
       qty: n.qty,
       netsuite_code: n.netsuite_code,
       remarks: n.remarks,
+      flag_reason: n.flag_reason || null,
       sort_order: n.sort_order
     }));
-    const { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
+    let { data, error } = await sb.from("bom_nodes").insert(insertRows).select();
+    if (error && /flag_reason/.test(error.message || "")){
+      // The flag_reason column hasn't been added to bom_nodes yet (see
+      // handoff SQL) -- degrade gracefully instead of failing the whole
+      // import: retry once without it, and just skip the review-flag UI
+      // until the column exists.
+      const fallbackRows = insertRows.map(({ flag_reason, ...rest }) => rest);
+      ({ data, error } = await sb.from("bom_nodes").insert(fallbackRows).select());
+    }
     if (error){ toast("BOM import error: " + error.message, true); return { insertedCount, totalCount: items.length, error: error.message }; }
     data.forEach((row, idx) => { tempToReal[batch[idx].tempId] = row.id; });
     insertedCount += data.length;
@@ -1654,6 +1808,27 @@ function classifyNodeType(row){
   return "item";
 }
 
+// Uncertainty flags — these never block the import ("flag and continue"): they
+// get attached to the row and surface as a review banner + per-row badge in
+// the UI, for a human to confirm or fix. Two triggers live here (ambiguous
+// classification, missing required fields); the other two (numbering
+// discrepancies, sub-assembly match failures) are detected in expand() below,
+// where the match-resolution result and the table's own item numbering are
+// available.
+function classificationFlagReason(row, nodeType){
+  const desc = (row.description || "").trim();
+  const partNumber = (row.part_number || "").trim();
+  const netsuite = (row.netsuite_code || "").trim().toUpperCase();
+  if (nodeType === "sub_assembly" && !netsuite.endsWith("-SA") &&
+      !SUB_ASSY_RE.test(desc) && !SUB_ASSY_RE.test(partNumber) && !desc && !netsuite){
+    return "Classified as a sub-assembly by the “no description / no NetSuite code” fallback rule, not by a -SA code or a name that says SUB ASSY — double-check this is really a group header and not a part the parser missed.";
+  }
+  if (nodeType === "item" && !desc && !partNumber && !netsuite){
+    return "Row has no part number, description, or NetSuite code — likely a parsing gap in the source table.";
+  }
+  return null;
+}
+
 // Category classification is a Master-BOM-stage concern: it's computed at
 // print/generation time (see renderPrintView), never during Full Assembly
 // ingestion, so the BOM Tree tab always shows pure structure.
@@ -1807,6 +1982,9 @@ function buildFullAssyTree(pages){
   function expand(node){
     const nodeType = classifyNodeType(node.row);
     node.row._node_type = nodeType;
+    const flags = [];
+    const clsFlag = classificationFlagReason(node.row, nodeType);
+    if (clsFlag) flags.push(clsFlag);
     // Always look for a more authoritative matching page for sub-assemblies,
     // even when this node already has children nested inline from its own
     // table row (e.g. a weldment's plain bar list) -- a dedicated detail page
@@ -1841,8 +2019,28 @@ function buildFullAssyTree(pages){
         usedPages.add(match.page);
         node.children = localNest(match.rows);
         node.row._resolved_from_page = match.page;
+        // Numbering/structural discrepancy check: the printed item numbers on
+        // the matched breakdown table should run 1..N with no gaps or repeats
+        // for N numbered rows. A mismatch (like the DOOR sub-assembly's
+        // printed 1-15 covering what should nest as 9 numbered items plus
+        // unnumbered hardware) is usually a drafting inconsistency in the
+        // source PDF, not a parser bug -- but it's worth a human glance.
+        const numbered = match.rows
+          .filter(r => r.item_no !== null)
+          .map(r => parseInt(r.item_no, 10))
+          .filter(n => !Number.isNaN(n));
+        if (numbered.length){
+          const maxNo = Math.max(...numbered);
+          const uniqueCount = new Set(numbered).size;
+          if (maxNo !== numbered.length || uniqueCount !== numbered.length){
+            flags.push(`Printed item numbers on this breakdown run up to ${maxNo}, but ${numbered.length} numbered row(s) were found (${uniqueCount} unique) — possible drafting/numbering inconsistency, verify against the source PDF.`);
+          }
+        }
+      } else if (node.children.length === 0){
+        flags.push("No dedicated breakdown table or matching title block was found anywhere in this document for this sub-assembly — it has no children and may need to be organized manually.");
       }
     }
+    if (flags.length) node.row._flag_reason = flags.join(" | ");
     node.children.forEach(expand);
   }
 
@@ -1870,6 +2068,7 @@ function buildFullAssyTree(pages){
         qty: row.qty ? parseFloat(row.qty) : 1,
         netsuite_code: row.netsuite_code || null,
         remarks: row.remarks || null,
+        flag_reason: row._flag_reason || null,
         sort_order: i
       });
       flatten(node.children, tempId);
