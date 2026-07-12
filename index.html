@@ -1709,7 +1709,44 @@ function findCuttingListTable(page){
   const allWords = dataLines.flatMap(l => l.words);
   const regionRight = Math.max(...allWords.map(w => w.x1)) + 5;
   const gapBoundaries = detectColumnBoundaries(allWords, regionLeft, regionRight);
-  const edges = Array.from(new Set([regionLeft, ...gapBoundaries, regionRight])).sort((a,b) => a-b);
+
+  // Two adjacent header labels can end up mapped to the SAME gap-detected
+  // segment when a table's actual DATA never leaves a clean whitespace gap
+  // between those two columns anywhere down the page (e.g. a long PART NUMBER
+  // value like "DISPENSER DOOR RUBBER SEAL - REV.0" runs close enough to the
+  // DESCRIPTION column's own values that no row-wide gap ever appears) --
+  // whichever header is assigned second below then silently overwrites the
+  // first's name in segmentNames. A REAL case found on the Dispensing Box Sub
+  // Assy's own cutting-list page: every row's PART NUMBER value ended up filed
+  // under "description" instead, with part_number left completely null.
+  //
+  // Fix ONLY genuine collisions (two headers landing in the same baseline
+  // segment) by splitting at their midpoint -- pairs that are already cleanly
+  // separated must be left untouched. A blanket midpoint-for-every-pair
+  // approach was tried first and made things worse: it also inserted a split
+  // between ITEM NO. and PART NUMBER on the root cutting-list table, where the
+  // two header labels' centers sit fairly close together even though the
+  // actual data (a single digit vs. a long free-text name) was already
+  // cleanly separated by its own natural gap -- the blanket split cut into the
+  // start of that real PART NUMBER text, corrupting item_no everywhere on
+  // that page.
+  const baseEdges = Array.from(new Set([regionLeft, ...gapBoundaries, regionRight])).sort((a,b) => a-b);
+  const baseSegments = [];
+  for (let i = 0; i < baseEdges.length - 1; i++) baseSegments.push([baseEdges[i], baseEdges[i+1]]);
+  function baseSegIndex(x){
+    for (let i = 0; i < baseSegments.length; i++){
+      if (x >= baseSegments[i][0] - 0.5 && x < baseSegments[i][1] + 0.5) return i;
+    }
+    return baseSegments.length - 1;
+  }
+  const headerEntries = Object.entries(headerPositions).sort((a,b) => a[1] - b[1]);
+  const collisionBoundaries = [];
+  for (let i = 0; i < headerEntries.length - 1; i++){
+    const x1 = headerEntries[i][1], x2 = headerEntries[i+1][1];
+    if (baseSegIndex(x1) === baseSegIndex(x2)) collisionBoundaries.push((x1 + x2) / 2);
+  }
+
+  const edges = Array.from(new Set([regionLeft, ...gapBoundaries, ...collisionBoundaries, regionRight])).sort((a,b) => a-b);
   const segments = [];
   for (let i = 0; i < edges.length - 1; i++) segments.push([edges[i], edges[i+1]]);
 
