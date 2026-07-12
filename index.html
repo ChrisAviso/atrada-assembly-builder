@@ -1934,6 +1934,30 @@ function localNest(rows){
   return nested;
 }
 
+// Folds a bare, unnumbered continuation row into the immediately preceding
+// sibling within the SAME children list. This is a different shape than the
+// "single nested child" case handled in expand() below: it happens when the
+// row carrying the name (e.g. an unnumbered "CAMLOCK PIPE - REV.0" hardware
+// line) has no item number of its own either, so localNest() lays it and its
+// own spec line ("CHS 26.9 X 2.6") side by side as flat siblings under the
+// nearest numbered ancestor instead of nesting one inside the other. Without
+// this, the name-only sibling's blank description/NetSuite trips
+// classifyNodeType()'s sub-assembly fallback exactly like the nested case.
+function foldSiblingContinuations(list){
+  for (let i = list.length - 1; i >= 1; i--){
+    const cur = list[i], prev = list[i - 1];
+    const curRow = cur.row;
+    const isBareContinuation = !curRow.item_no && cur.children.length === 0 &&
+      curRow.description && !curRow.part_number && !curRow.netsuite_code;
+    if (isBareContinuation && !prev.row.description && prev.row.part_number && prev.children.length === 0){
+      prev.row.description = curRow.description;
+      if (curRow.length_mm) prev.row.length_mm = curRow.length_mm;
+      list.splice(i, 1);
+    }
+  }
+  return list;
+}
+
 // Matches a candidate page either by its cutting-list table's first-row
 // part_number (original method), or by the candidate page's own page-level
 // "item: <name>" title-block label (new -- needed for sub-assembly detail
@@ -2137,10 +2161,11 @@ function buildFullAssyTree(pages){
       }
     }
     if (flags.length) node.row._flag_reason = flags.join(" | ");
+    node.children = foldSiblingContinuations(node.children);
     node.children.forEach(expand);
   }
 
-  const rootNested = localNest(byPage[rootPage].rows);
+  const rootNested = foldSiblingContinuations(localNest(byPage[rootPage].rows));
   rootNested.forEach(expand);
 
   const items = [];
