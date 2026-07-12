@@ -844,12 +844,20 @@ function buildCategoryBreakdown(items, byId){
 
 // Groups weldment items by profile+material (e.g. "SHS 40 X 3" / PRE-GALV), sums length*qty,
 // and computes 8m bars-to-order via ceiling division plus the resulting offcut.
-function buildWeldmentOrderSummary(items){
+function buildWeldmentOrderSummary(items, byId){
   const groups = {};
   const order = [];
   items.forEach(n => {
     const profile = (n.description || "").trim() || "Unspecified Profile";
-    const material = (n.material || "").trim() || "—";
+    // A raw cut-list piece (e.g. "SHS 40 X 3", length only) rarely carries its
+    // own part_number, so it never gets a materialByName hit of its own --
+    // but the sub-assembly it's cut for (e.g. "BOTTOM FRAME - REV.0") usually
+    // does have a title block naming the steel grade. Inherit that instead of
+    // reporting every raw piece as material "—" when the real spec is one
+    // level up, same fallback already used for sheetmetal in
+    // buildFlatOrderSummary/buildCategoryBreakdown.
+    const anc = byId ? findAncestorSubAssembly(n, byId) : null;
+    const material = (n.material || (anc ? anc.material : null) || "").trim() || "—";
     const key = profile + "||" + material;
     if (!groups[key]){ groups[key] = { profile, material, rows: [] }; order.push(key); }
     groups[key].rows.push({
@@ -984,7 +992,7 @@ function renderPrintView(){
 
   // ---- Weldments order summary (8m bar calc + cutting plan) ----
   const weldmentItems = itemsByCategory.weldment || [];
-  const weldSummary = buildWeldmentOrderSummary(weldmentItems);
+  const weldSummary = buildWeldmentOrderSummary(weldmentItems, byId);
   if (weldSummary.profileGroups.length){
     html += `<div class="print-band pb-green">Weldments - 8m Bar Order Summary (Procurement)</div>`;
     html += `<table class="print-bom-table"><thead><tr>
@@ -994,10 +1002,11 @@ function renderPrintView(){
     </tr></thead><tbody>`;
     let wn = 1;
     weldSummary.profileGroups.forEach(g => {
-      html += `<tr class="print-profile-row"><td colspan="8">${esc(g.profile)}</td></tr>`;
+      const profileLabel = g.material && g.material !== "—" ? `${g.profile} — ${g.material}` : g.profile;
+      html += `<tr class="print-profile-row"><td colspan="8">${esc(profileLabel)}</td></tr>`;
       g.rows.forEach(r => {
         html += `<tr>
-          <td>${wn++}</td><td>${esc(g.profile)}</td><td>${esc(r.usage)}</td>
+          <td>${wn++}</td><td>${esc(profileLabel)}</td><td>${esc(r.usage)}</td>
           <td>${fmtNum(r.length_mm)}</td><td>${fmtNum(r.qty)}</td><td>${fmtNum(r.qty * r.length_mm)}</td>
           <td></td><td></td>
         </tr>`;
