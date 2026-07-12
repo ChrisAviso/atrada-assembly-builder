@@ -1494,7 +1494,19 @@ function findCuttingListTable(page){
     if (row.rowTop <= headerBottom) continue;
     const fullText = row.map(w => w.text).join(" ").trim();
     if (STOP_RE.test(fullText)) break;
-    const kept = row.filter(w => w.x >= xThreshold);
+    // Engineering drawings in this template print a full sheet border grid
+    // (bare "1".."12" along the top/bottom, bare "A".."H" down the sides) as
+    // section/zone references. These bare single-letter tokens sit at the
+    // page's outer edges but can still land inside the table's x-range (a
+    // narrow-margin table spans nearly the full sheet width), and once
+    // caught they get grouped into whichever row happens to be nearest,
+    // corrupting a REMARKS or NETSUITE CODE value with a stray letter. No
+    // legitimate column in this table is ever a single bare letter (item
+    // numbers are digits, codes and remarks are always multi-character) --
+    // EXCEPT "X", which is the dimension multiplication sign used
+    // constantly in descriptions ("SHS 40 X 3", "PL. 5 X 375 X 2150") and
+    // must never be dropped.
+    const kept = row.filter(w => w.x >= xThreshold && (w.text === "X" || !/^[A-Z]$/.test(w.text)));
     if (!kept.length) continue;
     if (row.rowTop - prevBottom > 80) break;
     dataLines.push({ top: row.rowTop, words: kept });
@@ -1558,20 +1570,25 @@ function buildRowsFromTable(table){
   if (!anchors.length) return [];
   const anchorTops = anchors.map(a => a.top);
 
-  // A wrapped multi-line REMARKS value (e.g. "CUT" / "ANGLE" on separate
-  // lines) can sit closer to its item's own anchor row than to any other,
-  // but by an amount that varies row to row -- a fixed one-directional
-  // "lookahead" threshold is fragile right at the midpoint between two
-  // anchors (a line landing just outside the threshold silently gets
-  // claimed by the wrong, earlier anchor instead). Picking the anchor with
-  // the smallest absolute distance is strictly more robust and has no such
-  // boundary case.
+  // A wrapped multi-line value (a REMARKS wrap like "CUT" / "ANGLE", or a
+  // DESCRIPTION wrap that starts a line or two before its own item's row)
+  // can sit closer to its item's own anchor row than to any other, but by
+  // an amount that varies row to row -- a fixed one-directional "lookahead"
+  // threshold is fragile right at the midpoint between two anchors (a line
+  // landing just outside the threshold silently gets claimed by the wrong,
+  // earlier anchor instead). Picking the anchor with the smallest absolute
+  // distance is strictly more robust and has no such boundary case. On an
+  // exact tie, prefer the LATER anchor: a line sitting exactly midway
+  // between a preceding single-line row (already "closed", no continuation
+  // pending) and a following multi-line row's own wrap is virtually always
+  // the start of that following row's wrapped text, not a trailing orphan
+  // of the row before it.
   function assignGroup(y){
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < anchorTops.length; i++){
       const dist = Math.abs(anchorTops[i] - y);
-      if (dist < bestDist){ bestDist = dist; best = i; }
+      if (dist <= bestDist){ bestDist = dist; best = i; }
     }
     return best;
   }
@@ -1609,9 +1626,17 @@ function buildRowsFromTable(table){
 // sheetmetal/weldment/fastener/label category.
 function classifyNodeType(row){
   const desc = (row.description || "").trim();
+  const partNumber = (row.part_number || "").trim();
   const netsuite = (row.netsuite_code || "").trim().toUpperCase();
   if (netsuite.endsWith("-SA")) return "sub_assembly";
   if (!desc && !netsuite) return "sub_assembly"; // pure grouping/header row, e.g. "MAIN FRAME - REV.03"
+  // Some tables put a sub-assembly's own name in the DESCRIPTION bucket
+  // instead of leaving it blank (e.g. a "DISPENSER DOOR LH SUB ASSY - REV.0"
+  // row whose PART NUMBER column is empty for every row on that page) --
+  // the blank-desc/blank-netsuite rule above misses these entirely. The
+  // name literally saying "SUB ASSY"/"SUB-ASSY" is a more direct signal and
+  // catches them regardless of which bucket the text landed in.
+  if (SUB_ASSY_RE.test(desc) || SUB_ASSY_RE.test(partNumber)) return "sub_assembly";
   return "item";
 }
 
@@ -1748,10 +1773,16 @@ function buildFullAssyTree(pages){
   const titleBlocks = extractPartTitleBlocks(pages);
   const materialByName = {};
   const pageLabels = {};
+  // Maps a normalized name to the EARLIEST page anywhere in the document
+  // (table or not) whose own "item:" title block carries that name -- used
+  // below to anchor the page-order fallback to a specific sub-assembly
+  // instead of guessing at "whatever's next".
+  const namePageIndex = {};
   titleBlocks.forEach(b => {
     const key = normalizeName(b.name);
     if (key && b.material) materialByName[key] = b.material;
     if (!pageLabels[b.page]) pageLabels[b.page] = b;
+    if (key && !(key in namePageIndex)) namePageIndex[key] = b.page;
   });
 
   const rootPage = tables[0].page;
@@ -1768,7 +1799,30 @@ function buildFullAssyTree(pages){
     // (e.g. a "BOM TABLE(RESTRUCTURED)" cut-angle list with remarks) is more
     // complete and should replace the inline version when one exists.
     if (nodeType === "sub_assembly"){
-      const match = findMatchTable(node.row, tables, rootPage, usedPages, pageLabels);
+      let match = findMatchTable(node.row, tables, rootPage, usedPages, pageLabels);
+      // Some multi-level assembly drawings give a sub-assembly's own detail
+      // page NO self-reference on the TABLE page itself: no "item:" title
+      // block there, and its own first table row names its FIRST CHILD PART
+      // instead of itself (e.g. a "DISPENSING BOX SUB ASSY" wrapper whose
+      // cutting-list page 1 row is "DISPENSER BODY", not "DISPENSING BOX").
+      // But its name's title block DOES often appear on an earlier, non-table
+      // page (an exploded-view sheet for that same sub-assembly) -- so look
+      // up where THIS node's own name was seen anywhere in the document, and
+      // take the nearest not-yet-claimed table at or after that page. This
+      // is deliberately anchored to a confirmed name sighting rather than
+      // blindly grabbing "whatever's next": a sub-assembly that legitimately
+      // has no detail page anywhere (e.g. a small hardware kit left fully
+      // inline) has no name-page match either, so it correctly gets no
+      // fallback and keeps its (empty) inline structure instead of stealing
+      // an unrelated sub-assembly's page.
+      if (!match && node.children.length === 0){
+        const nameKey = normalizeName(node.row.part_number || node.row.description || "");
+        const titlePage = nameKey ? namePageIndex[nameKey] : undefined;
+        if (titlePage !== undefined){
+          const fallback = tables.find(t => t.page >= titlePage && t.page !== rootPage && !usedPages.has(t.page) && t.rows.length);
+          if (fallback) match = fallback;
+        }
+      }
       if (match){
         usedPages.add(match.page);
         node.children = localNest(match.rows);
