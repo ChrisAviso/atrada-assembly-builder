@@ -9,7 +9,32 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<script>
+(function(){
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function(){
+    var size = Math.max(img.naturalWidth, img.naturalHeight);
+    var canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,size,size);
+    var dx = Math.round((size - img.naturalWidth)/2);
+    var dy = Math.round((size - img.naturalHeight)/2);
+    ctx.drawImage(img, dx, dy, img.naturalWidth, img.naturalHeight);
+    try {
+      var url = canvas.toDataURL('image/png');
+      var link = document.querySelector('link[rel="icon"]') || document.createElement('link');
+      link.rel = 'icon';
+      link.type = 'image/png';
+      link.href = url;
+      if (!link.parentNode) document.head.appendChild(link);
+    } catch(e) {}
+  };
+  img.src = 'https://chrisaviso.github.io/atrada-so-schedule-board/Atrada_%20Symbol_%20Blue%20%5BRGB%5D.png';
+})();
+</script>
 <style>
 :root{
   /* Ink / structure (Atrada brand) */
