@@ -245,7 +245,7 @@ tr.flagged-row td:first-child{box-shadow:inset 3px 0 0 var(--orange);}
 .section-title{font-size:13.5px;font-weight:600;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;text-transform:uppercase;letter-spacing:.04em;color:var(--grey-text);}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 8px 24px rgba(15,22,36,.25);}
 
-/* New Assembly modal — matches the drawer's document-card language */
+/* New Assembly modal â matches the drawer's document-card language */
 #modalOverlay{position:fixed;inset:0;background:rgba(15,22,36,.5);backdrop-filter:blur(2px);z-index:150;display:none;align-items:center;justify-content:center;
   opacity:0;transition:opacity .15s ease;}
 #modalOverlay.open{display:flex;opacity:1;}
@@ -281,7 +281,7 @@ tr.flagged-row td:first-child{box-shadow:inset 3px 0 0 var(--orange);}
     <div class="brand"><img src="https://chrisaviso.github.io/atrada-so-schedule-board/Atrada_%20Symbol_%20Blue%20%5BRGB%5D.png" alt="Atrada"> Assembly Builder</div>
     <div class="right">
       <span id="userEmail"></span>
-      <button class="iconbtn" id="backToHubBtn">← Back to Hub</button>
+      <button class="iconbtn" id="backToHubBtn">â Back to Hub</button>
       <button class="iconbtn" id="signOutBtn">Sign out</button>
     </div>
   </div>
@@ -452,7 +452,7 @@ $("#signOutBtn").addEventListener("click", async () => {
 });
 
 $("#backToHubBtn").addEventListener("click", () => {
-  window.location.href = "https://chrisaviso.github.io/atrada-hub/";
+  window.location.href = (location.hostname.endsWith('pages.dev') ? 'https://atrada-hub.pages.dev/' : 'https://chrisaviso.github.io/atrada-hub/');
 });
 
 // =====================================================================
@@ -623,8 +623,8 @@ async function loadDrawerData(){
 
 function renderDrawerHeader(){
   const a = selectedAssembly;
-  $("#drawerTitle").innerHTML = `<span class="mono">${esc(a.assembly_number)}</span> — ${esc(a.assembly_name)}`;
-  $("#drawerSub").textContent = (a.client ? a.client + " · " : "") + "Rev " + (a.current_rev || "—");
+  $("#drawerTitle").innerHTML = `<span class="mono">${esc(a.assembly_number)}</span> â ${esc(a.assembly_name)}`;
+  $("#drawerSub").textContent = (a.client ? a.client + " Â· " : "") + "Rev " + (a.current_rev || "â");
   $("#metaStatus").innerHTML = ["draft","in_progress","ifc","on_hold","superseded"]
     .map(s => `<option value="${s}" ${s===a.status?"selected":""}>${statusLabel(s)}</option>`).join("");
   $("#metaClient").value = a.client || "";
@@ -720,7 +720,7 @@ function renderBomTab(){
   let html = "";
   if (flaggedCount){
     html += `<div class="review-banner">
-      <span>&#9888; ${flaggedCount} item(s) flagged for review — hover the &#9888; icon on a row for the reason.</span>
+      <span>&#9888; ${flaggedCount} item(s) flagged for review â hover the &#9888; icon on a row for the reason.</span>
       <button class="small-btn" id="toggleFlaggedOnly">${showFlaggedOnly ? "Show all items" : "Show flagged only"}</button>
     </div>`;
   }
@@ -889,11 +889,11 @@ function buildWeldmentOrderSummary(items, byId){
     // own part_number, so it never gets a materialByName hit of its own --
     // but the sub-assembly it's cut for (e.g. "BOTTOM FRAME - REV.0") usually
     // does have a title block naming the steel grade. Inherit that instead of
-    // reporting every raw piece as material "—" when the real spec is one
+    // reporting every raw piece as material "â" when the real spec is one
     // level up, same fallback already used for sheetmetal in
     // buildFlatOrderSummary/buildCategoryBreakdown.
     const anc = byId ? findAncestorSubAssembly(n, byId) : null;
-    const material = (n.material || (anc ? anc.material : null) || "").trim() || "—";
+    const material = (n.material || (anc ? anc.material : null) || "").trim() || "â";
     const key = profile + "||" + material;
     if (!groups[key]){ groups[key] = { profile, material, rows: [] }; order.push(key); }
     groups[key].rows.push({
@@ -974,7 +974,7 @@ function renderBreakdownSection(cat, items, byId){
       const byPart = {};
       const partOrder = [];
       g.rows.forEach(r => {
-        const key = r.part_number || "—";
+        const key = r.part_number || "â";
         if (!byPart[key]){ byPart[key] = []; partOrder.push(key); }
         byPart[key].push(r);
       });
@@ -1038,7 +1038,7 @@ function renderPrintView(){
     </tr></thead><tbody>`;
     let wn = 1;
     weldSummary.profileGroups.forEach(g => {
-      const profileLabel = g.material && g.material !== "—" ? `${g.profile} — ${g.material}` : g.profile;
+      const profileLabel = g.material && g.material !== "â" ? `${g.profile} â ${g.material}` : g.profile;
       html += `<tr class="print-profile-row"><td colspan="8">${esc(profileLabel)}</td></tr>`;
       g.rows.forEach(r => {
         html += `<tr>
@@ -1306,7 +1306,7 @@ async function processAndUploadFile(file){
               parseStatus = "parsed";
               const flaggedCount = result.items.filter(it => it.flag_reason).length;
               parseNotes = `${applyResult.insertedCount} line items auto-organized from cutting list`
-                + (flaggedCount ? ` — ${flaggedCount} flagged for review` : "");
+                + (flaggedCount ? ` â ${flaggedCount} flagged for review` : "");
             }
           } else {
             parseStatus = "manual";
@@ -1323,7 +1323,7 @@ async function processAndUploadFile(file){
             parseStatus = "parsed";
             parseNotes = `${applyResult.insertedCount} standard part(s) imported`
               + (applyResult.duplicateCodes && applyResult.duplicateCodes.length
-                ? ` — ${applyResult.duplicateCodes.length} NetSuite code(s) shared by multiple pages, collapsed to one row each, verify: ${applyResult.duplicateCodes.join(", ")}`
+                ? ` â ${applyResult.duplicateCodes.length} NetSuite code(s) shared by multiple pages, collapsed to one row each, verify: ${applyResult.duplicateCodes.join(", ")}`
                 : "");
           } else {
             parseStatus = "manual";
@@ -1554,7 +1554,7 @@ function parseMasterBom(pages){
 async function applyMasterBomResult(result){
   const { meta, items } = result;
 
-  // Update assembly meta (only fill blanks, don't clobber manual edits silently — but rev/description are authoritative from doc)
+  // Update assembly meta (only fill blanks, don't clobber manual edits silently â but rev/description are authoritative from doc)
   const updateFields = {};
   if (meta.current_rev) updateFields.current_rev = meta.current_rev;
   if (meta.assembly_name) updateFields.assembly_name = meta.assembly_name;
@@ -1638,7 +1638,7 @@ async function applyMasterBomResult(result){
 // exact-match line anyway, so including it here only broke real tables early.
 const STOP_RE = /^(EXPLODED|VIEW|CLIENT:|ASSEMBLY|DRAWN:|CHECKED:|APPROVED:|UNLESS|DIMENSIONS|TOLERANCE|GENERAL|SHEET|SCALE:|SCALE|WEIGHT:|DRAWING|REFERENCE)$/i;
 const SUB_ASSY_RE = /\bSUB[\s-]?ASSY\b/i;
-const REV_RE = /[-–]?\s*REV\.?\s*\d+\b/i;
+const REV_RE = /[-â]?\s*REV\.?\s*\d+\b/i;
 
 function detectColumnBoundaries(words, left, right, minGap){
   minGap = minGap || 8;
@@ -1916,7 +1916,7 @@ function classifyNodeType(row){
   return "item";
 }
 
-// Uncertainty flags — these never block the import ("flag and continue"): they
+// Uncertainty flags â these never block the import ("flag and continue"): they
 // get attached to the row and surface as a review banner + per-row badge in
 // the UI, for a human to confirm or fix. Two triggers live here (ambiguous
 // classification, missing required fields); the other two (numbering
@@ -1929,10 +1929,10 @@ function classificationFlagReason(row, nodeType){
   const netsuite = (row.netsuite_code || "").trim().toUpperCase();
   if (nodeType === "sub_assembly" && !netsuite.endsWith("-SA") &&
       !SUB_ASSY_RE.test(desc) && !SUB_ASSY_RE.test(partNumber) && !desc && !netsuite){
-    return "Classified as a sub-assembly by the “no description / no NetSuite code” fallback rule, not by a -SA code or a name that says SUB ASSY — double-check this is really a group header and not a part the parser missed.";
+    return "Classified as a sub-assembly by the âno description / no NetSuite codeâ fallback rule, not by a -SA code or a name that says SUB ASSY â double-check this is really a group header and not a part the parser missed.";
   }
   if (nodeType === "item" && !desc && !partNumber && !netsuite){
-    return "Row has no part number, description, or NetSuite code — likely a parsing gap in the source table.";
+    return "Row has no part number, description, or NetSuite code â likely a parsing gap in the source table.";
   }
   return null;
 }
@@ -2198,11 +2198,11 @@ function buildFullAssyTree(pages){
           const maxNo = Math.max(...numbered);
           const uniqueCount = new Set(numbered).size;
           if (maxNo !== numbered.length || uniqueCount !== numbered.length){
-            flags.push(`Printed item numbers on this breakdown run up to ${maxNo}, but ${numbered.length} numbered row(s) were found (${uniqueCount} unique) — possible drafting/numbering inconsistency, verify against the source PDF.`);
+            flags.push(`Printed item numbers on this breakdown run up to ${maxNo}, but ${numbered.length} numbered row(s) were found (${uniqueCount} unique) â possible drafting/numbering inconsistency, verify against the source PDF.`);
           }
         }
       } else if (node.children.length === 0){
-        flags.push("No dedicated breakdown table or matching title block was found anywhere in this document for this sub-assembly — it has no children and may need to be organized manually.");
+        flags.push("No dedicated breakdown table or matching title block was found anywhere in this document for this sub-assembly â it has no children and may need to be organized manually.");
       }
     }
     if (flags.length) node.row._flag_reason = flags.join(" | ");
